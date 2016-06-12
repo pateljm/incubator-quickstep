@@ -77,6 +77,10 @@ class AggregationOperator : public RelationalOperator {
 
   ~AggregationOperator() override {}
 
+  std::string getName() const override {
+    return "AggregationOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

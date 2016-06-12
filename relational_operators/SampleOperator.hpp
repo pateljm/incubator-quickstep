@@ -93,6 +93,10 @@ class SampleOperator : public RelationalOperator {
 
   ~SampleOperator() override {}
 
+  std::string getName() const override {
+    return "SampleOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

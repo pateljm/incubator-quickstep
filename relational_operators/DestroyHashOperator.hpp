@@ -58,6 +58,10 @@ class DestroyHashOperator : public RelationalOperator {
 
   ~DestroyHashOperator() override {}
 
+  std::string getName() const override {
+    return "DestroyHashOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

@@ -73,6 +73,10 @@ class InsertOperator : public RelationalOperator {
 
   ~InsertOperator() override {}
 
+  std::string getName() const override {
+    return "InsertOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

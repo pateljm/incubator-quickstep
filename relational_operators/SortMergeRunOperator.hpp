@@ -129,6 +129,10 @@ class SortMergeRunOperator : public RelationalOperator {
    **/
   ~SortMergeRunOperator() {}
 
+  std::string getName() const override {
+    return "SortMergeRunOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

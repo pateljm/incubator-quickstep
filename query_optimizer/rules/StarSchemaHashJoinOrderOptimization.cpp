@@ -281,6 +281,7 @@ physical::PhysicalPtr StarSchemaHashJoinOrderOptimization::generatePlan(
       // TODO(jianqiao): Cache the estimated cardinality for each plan in cost
       // model to avoid duplicated estimation.
       second_table_info->estimated_cardinality = cost_model_->estimateCardinality(output);
+//      second_table_info->estimated_selectivity = cost_model_->estimateSelectivity(output);
 
       second_table_info->join_attribute_pairs.insert(first_table_info->join_attribute_pairs.begin(),
                                                      first_table_info->join_attribute_pairs.end());

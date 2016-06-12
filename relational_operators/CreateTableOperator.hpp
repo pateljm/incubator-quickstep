@@ -66,6 +66,10 @@ class CreateTableOperator : public RelationalOperator {
 
   ~CreateTableOperator() override {}
 
+  std::string getName() const override {
+    return "CreateTableOperator";
+  }
+
   /**
    * @note No WorkOrder generated for this operator.
    **/

@@ -94,6 +94,10 @@ class UpdateOperator : public RelationalOperator {
 
   ~UpdateOperator() override {}
 
+  std::string getName() const override {
+    return "UpdateOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

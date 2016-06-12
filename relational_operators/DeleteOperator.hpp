@@ -81,6 +81,10 @@ class DeleteOperator : public RelationalOperator {
 
   ~DeleteOperator() override {}
 
+  std::string getName() const override {
+    return "DeleteOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

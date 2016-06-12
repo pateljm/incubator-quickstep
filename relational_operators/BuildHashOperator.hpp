@@ -93,6 +93,10 @@ class BuildHashOperator : public RelationalOperator {
 
   ~BuildHashOperator() override {}
 
+  std::string getName() const override {
+    return "BuildHashOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

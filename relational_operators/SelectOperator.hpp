@@ -189,6 +189,10 @@ class SelectOperator : public RelationalOperator {
 
   ~SelectOperator() override {}
 
+  std::string getName() const override {
+    return "SelectOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

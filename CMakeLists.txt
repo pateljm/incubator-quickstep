@@ -760,6 +760,8 @@ target_link_libraries(quickstep_cli_shell
                       quickstep_queryoptimizer_QueryProcessor
                       quickstep_storage_PreloaderThread
                       quickstep_threading_ThreadIDBasedMap
+                      quickstep_utility_DAGVisualizer
+                      quickstep_utility_EventProfiler
                       quickstep_utility_Macros
                       quickstep_utility_PtrVector
                       quickstep_utility_SqlError

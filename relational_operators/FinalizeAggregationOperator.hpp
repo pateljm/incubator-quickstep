@@ -74,6 +74,10 @@ class FinalizeAggregationOperator : public RelationalOperator {
 
   ~FinalizeAggregationOperator() override {}
 
+  std::string getName() const override {
+    return "FinalizeAggregationOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

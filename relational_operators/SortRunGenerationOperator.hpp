@@ -109,6 +109,10 @@ class SortRunGenerationOperator : public RelationalOperator {
 
   ~SortRunGenerationOperator() {}
 
+  std::string getName() const override {
+    return "SortRunGenerationOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,
