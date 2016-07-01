@@ -331,6 +331,8 @@ int main(int argc, char* argv[]) {
 //  google::protobuf::TextFormat::PrintToString(
 //      query_processor->getDefaultDatabase()->getProto(), &proto_str);
 //  std::cerr << proto_str << "\n";
+//  query_processor->markCatalogAltered();
+//  query_processor->saveCatalog();
 
   // Parse the CPU affinities for workers and the preloader thread, if enabled
   // to warm up the buffer pool.

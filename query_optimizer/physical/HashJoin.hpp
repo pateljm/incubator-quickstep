@@ -124,6 +124,9 @@ class HashJoin : public BinaryJoin {
       const expressions::UnorderedNamedExpressionSet &referenced_expressions,
       PhysicalPtr *output) const override;
 
+  bool impliesUniqueAttributes(
+      const std::vector<expressions::AttributeReferencePtr> &attributes) const override;
+
   /**
    * @brief Creates a physical HashJoin. The left/right operand does not correspond to
    *        probe/build operand.

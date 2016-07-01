@@ -168,6 +168,7 @@ add_library(quickstep_utility_Cast ../empty_src.cpp Cast.hpp)
 add_library(quickstep_utility_CheckSnprintf ../empty_src.cpp CheckSnprintf.hpp)
 add_library(quickstep_utility_DAG ../empty_src.cpp DAG.hpp)
 add_library(quickstep_utility_DAGVisualizer DAGVisualizer.cpp DAGVisualizer.hpp)
+add_library(quickstep_utility_DisjointTreeForest ../empty_src.cpp DisjointTreeForest.hpp)
 add_library(quickstep_utility_EventProfiler EventProfiler.cpp EventProfiler.hpp)
 add_library(quickstep_utility_EqualsAnyConstant ../empty_src.cpp EqualsAnyConstant.hpp)
 add_library(quickstep_utility_Glob Glob.cpp Glob.hpp)
@@ -257,6 +258,7 @@ target_link_libraries(quickstep_utility_DAGVisualizer
                       quickstep_utility_EventProfiler
                       quickstep_utility_Macros
                       quickstep_utility_StringUtil)
+target_link_libraries(quickstep_utility_DisjointTreeForest)
 target_link_libraries(quickstep_utility_PtrList
                       quickstep_utility_Macros)
 target_link_libraries(quickstep_utility_PtrMap

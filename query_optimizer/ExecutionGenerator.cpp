@@ -673,9 +673,21 @@ void ExecutionGenerator::convertHashJoin(const P::HashJoinPtr &physical_plan) {
   std::size_t build_cardinality = cost_model_->estimateCardinality(build_physical);
   // For inner join, we may swap the probe table and the build table.
   if (physical_plan->join_type() == P::HashJoin::JoinType::kInnerJoin)  {
-    // Choose the smaller table as the inner build table,
-    // and the other one as the outer probe table.
-    if (probe_cardinality < build_cardinality) {
+    const bool left_unique_join_attrs =
+        probe_physical->impliesUniqueAttributes(left_join_attributes);
+    const bool right_unique_join_attrs =
+        build_physical->impliesUniqueAttributes(right_join_attributes);
+
+    bool swap_probe_build;
+    if (left_unique_join_attrs != right_unique_join_attrs) {
+      swap_probe_build = left_unique_join_attrs;
+    } else {
+      // Choose the smaller table as the inner build table,
+      // and the other one as the outer probe table.
+      swap_probe_build = (probe_cardinality < build_cardinality);
+    }
+
+    if (swap_probe_build) {
       // Switch the probe and build physical nodes.
       std::swap(probe_physical, build_physical);
       std::swap(probe_cardinality, build_cardinality);

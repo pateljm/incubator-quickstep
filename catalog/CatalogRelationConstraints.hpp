@@ -18,6 +18,7 @@
 #ifndef QUICKSTEP_CATALOG_CATALOG_RELATION_CONSTRAINTS_HPP_
 #define QUICKSTEP_CATALOG_CATALOG_RELATION_CONSTRAINTS_HPP_
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 #include <set>
@@ -82,6 +83,18 @@ class CatalogRelationConstraints {
 
   void removePrimaryKey() {
     primary_key_.reset();
+  }
+
+  bool impliesUniqueAttributes(const std::set<attribute_id> &attributes) const {
+    if (primary_key_ == nullptr) {
+      return false;
+    }
+
+    std::vector<attribute_id> attr_intersection;
+    std::set_intersection(primary_key_->begin(), primary_key_->end(),
+                          attributes.begin(), attributes.end(),
+                          std::back_inserter(attr_intersection));
+    return (attr_intersection.size() == primary_key_->size());
   }
 
  private:
