@@ -320,6 +320,7 @@ target_link_libraries(quickstep_utility
                       quickstep_utility_CheckSnprintf
                       quickstep_utility_DAG
                       quickstep_utility_DAGVisualizer
+                      quickstep_utility_DisjointTreeForest
                       quickstep_utility_EventProfiler
                       quickstep_utility_EqualsAnyConstant
                       quickstep_utility_Glob
