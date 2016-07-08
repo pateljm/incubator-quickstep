@@ -25,7 +25,7 @@
 #include <vector>
 
 #include "catalog/CatalogTypedefs.hpp"
-#include "expressions/aggregation/AggregationHandle.hpp"
+#include "expressions/window_aggregation/WindowAggregationHandle.hpp"
 #include "expressions/scalar/Scalar.hpp"
 #include "expressions/scalar/ScalarAttribute.hpp"
 #include "storage/StorageBlockInfo.hpp"
@@ -34,7 +34,7 @@
 
 namespace quickstep {
 
-class AggregateFunction;
+class WindowAggregateFunction;
 class CatalogDatabaseLite;
 class CatalogRelationSchema;
 class InsertDestination;
@@ -67,7 +67,7 @@ class WindowAggregationOperationState {
    *        tables.
    */
   WindowAggregationOperationState(const CatalogRelationSchema &input_relation,
-                                  const AggregateFunction *window_aggregate_function,
+                                  const WindowAggregateFunction *window_aggregate_function,
                                   std::vector<std::unique_ptr<const Scalar>> &&arguments,
                                   std::vector<std::unique_ptr<const Scalar>> &&partition_by_attributes,
                                   const bool is_row,
@@ -107,54 +107,25 @@ class WindowAggregationOperationState {
                            const CatalogDatabaseLite &database);
 
   /**
-   * @brief Get the is_row info.
-   * @note This is a quickfix for "unused variable". After the window aggregate
-   *       functions are built, these methods might be dropped.
-   * 
-   * @return True if the frame mode is ROW, false if it is RANGE.
-   **/
-  const bool is_row() const { return is_row_; }
-
-  /**
-   * @brief Get the num_preceding info.
-   * @note This is a quickfix for "unused variable". After the window aggregate
-   *       functions are built, these methods might be dropped.
+   * @brief Compute window aggregates on the tuples of the given relation.
    *
-   * @return The number of rows/range that precedes the current row.
+   * @param output_destination The output destination for the computed window
+   *                           aggregate.
    **/
-  const std::int64_t num_preceding() const { return num_preceding_; }
-
-  /**
-   * @brief Get the num_following info.
-   * @note This is a quickfix for "unused variable". After the window aggregate
-   *       functions are built, these methods might be dropped.
-   *
-   * @return The number of rows/range that follows the current row.
-   **/
-  const std::int64_t num_following() const { return num_following_; }
-
-  /**
-   * @brief Get the pointer to StorageManager.
-   * @note This is a quickfix for "unused variable". After the window aggregate
-   *       functions are built, these methods might be dropped.
-   *
-   * @return A pointer to the storage manager.
-   **/
-  StorageManager *storage_manager() { return storage_manager_; }
+  void windowAggregateBlocks(InsertDestination *output_destination,
+                             const std::vector<block_id> &block_ids);
 
  private:
   const CatalogRelationSchema &input_relation_;
 
   // TODO(Shixuan): Handle and State for window aggregation will be needed for
   //                actual calculation.
-  std::unique_ptr<AggregationHandle> window_aggregation_handle_;
-  std::unique_ptr<AggregationState> window_aggregation_state_;
+  std::unique_ptr<WindowAggregationHandle> window_aggregation_handle_;
+  
   std::vector<std::unique_ptr<const Scalar>> arguments_;
+  std::vector<attribute_id> partition_by_ids_;
 
-  // We don't add order_by_attributes here since it is not needed after sorting.
-  std::vector<std::unique_ptr<const Scalar>> partition_by_attributes_;
-
-  // Window framing information.
+  // Frame info.
   const bool is_row_;
   const std::int64_t num_preceding_;
   const std::int64_t num_following_;

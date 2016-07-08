@@ -19,15 +19,15 @@ syntax = "proto2";
 
 package quickstep.serialization;
 
-import "expressions/aggregation/AggregateFunction.proto";
+import "expressions/window_aggregation/WindowAggregateFunction.proto";
 import "expressions/Expressions.proto";
 
 message WindowAggregationOperationState {
-  required int32 relation_id = 1;
-  required AggregateFunction function = 2;
-  repeated Scalar arguments = 3;
-  repeated Scalar partition_by_attributes = 4;
-  required bool is_row = 5;
-  required int64 num_preceding = 6;  // -1 means UNBOUNDED PRECEDING.
-  required int64 num_following = 7;  // -1 means UNBOUNDED FOLLOWING.
+  required int32 input_relation_id = 1;
+  required WindowAggregateFunction function = 3;
+  repeated Scalar arguments = 4;
+  repeated Scalar partition_by_attributes = 5;
+  required bool is_row = 6;
+  required int64 num_preceding = 7;  // -1 means UNBOUNDED PRECEDING.
+  required int64 num_following = 8;  // -1 means UNBOUNDED FOLLOWING.
 }
