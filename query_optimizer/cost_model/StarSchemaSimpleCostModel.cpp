@@ -173,8 +173,14 @@ double StarSchemaSimpleCostModel::estimateSelectivity(
     case P::PhysicalType::kHashJoin: {
       const P::HashJoinPtr &hash_join =
           std::static_pointer_cast<const P::HashJoin>(physical_plan);
-      return std::min(estimateSelectivity(hash_join->left()),
-                      estimateSelectivity(hash_join->right()));
+      double left_selectivity = estimateSelectivity(hash_join->left());
+      double right_selectivity = estimateSelectivity(hash_join->right());
+      double min_sel = std::min(left_selectivity, right_selectivity);
+      double max_sel = std::max(left_selectivity, right_selectivity);
+      if (max_sel < 1) {
+        min_sel *= std::max(max_sel, 0.9);
+      }
+      return min_sel;
     }
     case P::PhysicalType::kNestedLoopsJoin: {
       const P::NestedLoopsJoinPtr &nested_loop_join =

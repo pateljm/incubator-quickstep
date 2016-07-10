@@ -242,10 +242,10 @@ physical::PhysicalPtr StarSchemaHashJoinOrderOptimization::generatePlan(
     CHECK(selected_probe_table_info != nullptr);
     CHECK(selected_build_table_info != nullptr);
 
-    std::cerr << selected_probe_table_info->estimated_num_output_attributes
-              << " -- "
-              << selected_build_table_info->estimated_num_output_attributes
-              << "\n";
+//    std::cerr << selected_probe_table_info->estimated_num_output_attributes
+//              << " -- "
+//              << selected_build_table_info->estimated_num_output_attributes
+//              << "\n";
 
     remaining_tables.erase(selected_probe_table_info);
     remaining_tables.erase(selected_build_table_info);

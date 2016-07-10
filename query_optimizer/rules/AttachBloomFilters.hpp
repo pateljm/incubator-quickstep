@@ -61,33 +61,37 @@ class AttachBloomFilters : public Rule<physical::Physical> {
   struct BloomFilterInfo {
     BloomFilterInfo(const physical::PhysicalPtr &source_in,
                     const expressions::AttributeReferencePtr &attribute_in,
+                    const int depth_in,
                     const double selectivity_in,
-                    const bool from_sibling_in)
+                    const bool from_sibling_in,
+                    const expressions::AttributeReferencePtr &source_attribute_in = nullptr)
         : source(source_in),
           attribute(attribute_in),
+          depth(depth_in),
           selectivity(selectivity_in),
-          from_sibling(from_sibling_in) {
-    }
-    BloomFilterInfo(const BloomFilterInfo &info)
-        : source(info.source),
-          attribute(info.attribute),
-          selectivity(info.selectivity),
-          from_sibling(info.from_sibling) {
+          from_sibling(from_sibling_in),
+          source_attribute(
+              source_attribute_in == nullptr
+                  ? attribute_in
+                  : source_attribute_in) {
+
     }
     physical::PhysicalPtr source;
     expressions::AttributeReferencePtr attribute;
+    int depth;
     double selectivity;
     bool from_sibling;
+    expressions::AttributeReferencePtr source_attribute;
   };
 
-  void visitProducer(const physical::PhysicalPtr &node);
+  void visitProducer(const physical::PhysicalPtr &node, int depth);
 
   void visitConsumer(const physical::PhysicalPtr &node);
 
   std::unique_ptr<cost::StarSchemaSimpleCostModel> cost_model_;
 
-  std::map<physical::PhysicalPtr, std::vector<const BloomFilterInfo>> producers_;
-  std::map<physical::PhysicalPtr, std::vector<const BloomFilterInfo>> consumers_;
+  std::map<physical::PhysicalPtr, std::vector<BloomFilterInfo>> producers_;
+  std::map<physical::PhysicalPtr, std::vector<BloomFilterInfo>> consumers_;
 
   DISALLOW_COPY_AND_ASSIGN(AttachBloomFilters);
 };
