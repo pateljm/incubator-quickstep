@@ -48,6 +48,7 @@
 #include "types/TypedValue.hpp"
 #include "types/containers/ColumnVector.hpp"
 #include "types/containers/ColumnVectorsValueAccessor.hpp"
+#include "utility/EventProfiler.hpp"
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -501,6 +502,11 @@ void HashInnerJoinWorkOrder::execute() {
                                                                   probe_accessor.get(),
                                                                   build_block_entry.second));
     }
+    auto *container = simple_profiler.getContainer();
+    auto *line = container->getEventLine(getOperatorIndex());
+    line->emplace_back();
+    line->back().endEvent();
+    line->back().setPayload(temp_result.getNumTuples());
 
     // NOTE(chasseur): calling the bulk-insert method of InsertDestination once
     // for each pair of joined blocks incurs some extra overhead that could be

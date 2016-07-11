@@ -75,6 +75,10 @@ class WindowAggregationOperator : public RelationalOperator {
 
   ~WindowAggregationOperator() override {}
 
+  std::string getName() const override {
+    return "WindowAggregationOperator";
+  }
+
   bool getAllWorkOrders(WorkOrdersContainer *container,
                         QueryContext *query_context,
                         StorageManager *storage_manager,

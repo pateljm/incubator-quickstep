@@ -166,7 +166,7 @@ class EventProfiler {
   Mutex mutex_;
 };
 
-extern EventProfiler<std::string, int> simple_profiler;
+extern EventProfiler<int, std::size_t> simple_profiler;
 extern EventProfiler<std::size_t> relop_profiler;
 
 /** @} */

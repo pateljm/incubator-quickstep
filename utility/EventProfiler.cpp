@@ -23,7 +23,7 @@
 
 namespace quickstep {
 
-EventProfiler<std::string, int> simple_profiler;
+EventProfiler<int, std::size_t> simple_profiler;
 EventProfiler<std::size_t> relop_profiler;
 
 }  // namespace quickstep
