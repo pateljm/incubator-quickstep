@@ -41,6 +41,7 @@
 #include "types/TypedValue.hpp"
 #include "utility/BloomFilter.hpp"
 #include "utility/BloomFilterAdapter.hpp"
+#include "utility/EventProfiler.hpp"
 #include "utility/HashPair.hpp"
 #include "utility/Macros.hpp"
 
@@ -2253,11 +2254,14 @@ void HashTable<ValueT, resizable, serializable, force_key_copy, allow_duplicate_
       bloom_filter_adapter.reset(
           new BloomFilterAdapter(probe_bloom_filters_, probe_attribute_ids_));
     }
+    int hash_probe_cnt = 0;
+    int bloom_probe_cnt = 0;
     while (accessor->next()) {
-      if (has_probe_side_bloom_filter_ && bloom_filter_adapter->miss(accessor)) {
+      if (has_probe_side_bloom_filter_ && bloom_filter_adapter->miss(accessor, &bloom_probe_cnt)) {
         continue;  // On a bloom filter miss, probing the hash table can be skipped.
       }
 
+      ++hash_probe_cnt;
       TypedValue key = accessor->getTypedValue(key_attr_id);
       if (check_for_null_keys && key.isNull()) {
         continue;
@@ -2275,6 +2279,16 @@ void HashTable<ValueT, resizable, serializable, force_key_copy, allow_duplicate_
         }
       }
     }
+    auto *container = simple_profiler.getContainer();
+    const int op_index = container->getContext();
+    auto *hash_probe_line = container->getEventLine(op_index + 100);
+    hash_probe_line->emplace_back();
+    hash_probe_line->back().endEvent();
+    hash_probe_line->back().setPayload(hash_probe_cnt);
+    auto *bloom_probe_line = container->getEventLine(op_index + 200);
+    bloom_probe_line->emplace_back();
+    bloom_probe_line->back().endEvent();
+    bloom_probe_line->back().setPayload(bloom_probe_cnt);
   });
 }
 

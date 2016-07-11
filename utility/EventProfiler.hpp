@@ -77,6 +77,9 @@ class EventProfiler {
   };
 
   struct EventContainer {
+    EventContainer()
+        : context(0) {}
+
     inline void startEvent(const TagT &tag) {
       events[tag].emplace_back(clock::now());
     }
@@ -91,7 +94,16 @@ class EventProfiler {
       return &events[tag];
     }
 
+    inline void setContext(int context_in) {
+      context = context_in;
+    }
+
+    inline int getContext() const {
+      return context;
+    }
+
     std::map<TagT, std::vector<EventInfo>> events;
+    int context;
   };
 
   EventContainer *getContainer() {

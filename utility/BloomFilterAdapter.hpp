@@ -54,12 +54,12 @@ class BloomFilterAdapter {
   }
 
   template <typename ValueAccessorT>
-  inline bool miss(const ValueAccessorT *accessor) {
-    return missImpl<ValueAccessorT, true>(accessor);
+  inline bool miss(const ValueAccessorT *accessor, int *probe_cnt) {
+    return missImpl<ValueAccessorT, true>(accessor, probe_cnt);
   }
 
   template <typename ValueAccessorT, bool adapt_filters>
-  inline bool missImpl(const ValueAccessorT *accessor) {
+  inline bool missImpl(const ValueAccessorT *accessor, int *probe_cnt) {
     for (std::size_t i = 0; i < num_bloom_filters_; ++i) {
       const std::size_t entry_idx = bloom_filter_entry_indices_[i];
       BloomFilterEntry &entry = bloom_filter_entries_[entry_idx];
@@ -69,6 +69,7 @@ class BloomFilterAdapter {
 
       const BloomFilter *bloom_filter = entry.bloom_filter;
       for (const attribute_id &attr_id : entry.attribute_ids) {
+        ++(*probe_cnt);
         const std::pair<const void*, std::size_t> value_and_byte_length =
             accessor->getUntypedValueAndByteLength(attr_id);
         if (!bloom_filter->contains(static_cast<const std::uint8_t*>(value_and_byte_length.first),

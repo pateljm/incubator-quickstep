@@ -204,7 +204,8 @@ bool HashJoinOperator::getAllNonOuterJoinWorkOrders(
                                      selection,
                                      hash_table,
                                      output_destination,
-                                     storage_manager),
+                                     storage_manager,
+                                     op_index_),
               op_index_);
         }
         started_ = true;
@@ -224,7 +225,8 @@ bool HashJoinOperator::getAllNonOuterJoinWorkOrders(
                 selection,
                 hash_table,
                 output_destination,
-                storage_manager),
+                storage_manager,
+                op_index_),
             op_index_);
         ++num_workorders_generated_;
       }  // end while
@@ -421,6 +423,8 @@ void HashInnerJoinWorkOrder::execute() {
   BlockReference probe_block(
       storage_manager_->getBlock(block_id_, probe_relation_));
   const TupleStorageSubBlock &probe_store = probe_block->getTupleStorageSubBlock();
+  auto *container = simple_profiler.getContainer();
+  container->setContext(getOperatorIndex());
 
   std::unique_ptr<ValueAccessor> probe_accessor(probe_store.createValueAccessor());
   MapBasedJoinedTupleCollector collector;
@@ -441,6 +445,7 @@ void HashInnerJoinWorkOrder::execute() {
   const relation_id build_relation_id = build_relation_.getID();
   const relation_id probe_relation_id = probe_relation_.getID();
 
+  auto *output_line = container->getEventLine(getOperatorIndex());
   for (std::pair<const block_id, std::vector<std::pair<tuple_id, tuple_id>>>
            &build_block_entry : *collector.getJoinedTuples()) {
     BlockReference build_block =
@@ -502,11 +507,9 @@ void HashInnerJoinWorkOrder::execute() {
                                                                   probe_accessor.get(),
                                                                   build_block_entry.second));
     }
-    auto *container = simple_profiler.getContainer();
-    auto *line = container->getEventLine(getOperatorIndex());
-    line->emplace_back();
-    line->back().endEvent();
-    line->back().setPayload(temp_result.getNumTuples());
+    output_line->emplace_back();
+    output_line->back().endEvent();
+    output_line->back().setPayload(temp_result.getNumTuples());
 
     // NOTE(chasseur): calling the bulk-insert method of InsertDestination once
     // for each pair of joined blocks incurs some extra overhead that could be
