@@ -26,10 +26,12 @@
 #include "catalog/CatalogTypedefs.hpp"
 #include "expressions/window_aggregation/WindowAggregateFunction.pb.h"
 #include "expressions/window_aggregation/WindowAggregationID.hpp"
+#include "storage/StorageBlockInfo.hpp"
 #include "utility/Macros.hpp"
 
 namespace quickstep {
 
+class CatalogRelationSchema;
 class WindowAggregationHandle;
 class Type;
 
@@ -128,6 +130,8 @@ class WindowAggregateFunction {
    *         is responsible for deleting the returned object.
    **/
   virtual WindowAggregationHandle* createHandle(
+      const CatalogRelationSchema &relation,
+      const std::vector<block_id> block_ids,
       std::vector<const Type*> &&argument_types,
       std::vector<const Type*> &&partition_key_types) const = 0;
 

@@ -99,14 +99,13 @@ class WindowAggregationHandle {
    * @param output_destination The destination for output.
    **/
   virtual void calculate(const std::vector<std::unique_ptr<const Scalar>> &arguments,
-                         const std::vector<block_id> &block_ids,
                          const std::vector<attribute_id> &partition_by_ids,
-                         const CatalogRelationSchema &relation,
                          const bool is_row,
                          const std::int64_t num_preceding,
                          const std::int64_t num_following,
-                         StorageManager *storage_manager,
-                         InsertDestinationInterface *output_destination) const = 0;
+                         StorageManager *storage_manager) = 0;
+
+  virtual std::vector<ValueAccessor*>&& finalize(StorageManager *storage_manager) = 0;
 
  protected:
   /**
@@ -119,7 +118,14 @@ class WindowAggregationHandle {
    * @param num_following The number of rows/range that follows the current row.
    * @param storage_manager A pointer to the storage manager.
    **/
-  WindowAggregationHandle() {}
+  WindowAggregationHandle(const CatalogRelationSchema &relation,
+                          const std::vector<block_id> block_ids)
+      : block_ids_(block_ids),
+        relation_(relation) {}
+
+  std::vector<ColumnVector*> window_aggregates_;
+  const std::vector<block_id> block_ids_;
+  const CatalogRelationSchema &relation_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WindowAggregationHandle);

@@ -2630,8 +2630,8 @@ E::ScalarPtr Resolver::resolveFunctionCall(
   // TODO(Shixuan): We might want to create a new abstract class Function to
   // include both AggregateFunction and WindowAggregateFunction, which will make
   // this part of code cleaner.
-  const ::quickstep::AggregateFunction *aggregate;
-  const ::quickstep::WindowAggregateFunction *window_aggregate;
+  const ::quickstep::AggregateFunction *aggregate = nullptr;
+  const ::quickstep::WindowAggregateFunction *window_aggregate = nullptr;
   if (parse_function_call.isWindow()) {
     window_aggregate = WindowAggregateFunctionFactory::GetByName(function_name);
   } else {
@@ -2670,7 +2670,7 @@ E::ScalarPtr Resolver::resolveFunctionCall(
       || (window_aggregate != nullptr && window_aggregate->getWindowAggregationID() == WindowAggregationID::kCount)) {
     if ((resolved_arguments.empty()) && !count_star) {
       THROW_SQL_ERROR_AT(&parse_function_call)
-          << "COUNT function requires an argument (either scalar or star (*))";
+          << "COUNT aggregate requires an argument (either scalar or star (*))";
     }
   }
 
@@ -2684,7 +2684,7 @@ E::ScalarPtr Resolver::resolveFunctionCall(
   if ((aggregate != nullptr && !aggregate->canApplyToTypes(argument_types))
       || (window_aggregate != nullptr && !window_aggregate->canApplyToTypes(argument_types))) {
     THROW_SQL_ERROR_AT(&parse_function_call)
-        << "Function " << aggregate->getName()
+        << "Aggregate function " << aggregate->getName()
         << " can not apply to the given argument(s).";
   }
 

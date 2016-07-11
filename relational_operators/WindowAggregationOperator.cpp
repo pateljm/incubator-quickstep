@@ -81,8 +81,7 @@ serialization::WorkOrder* WindowAggregationOperator::createWorkOrderProto() {
 
 
 void WindowAggregationWorkOrder::execute() {
-  state_->windowAggregateBlocks(output_destination_,
-                                block_ids_);
+  state_->windowAggregateBlocks(output_destination_);
 }
 
 }  // namespace quickstep

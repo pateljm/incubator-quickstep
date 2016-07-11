@@ -47,6 +47,7 @@ namespace quickstep {
 
 WindowAggregationOperationState::WindowAggregationOperationState(
     const CatalogRelationSchema &input_relation,
+    std::vector<block_id> &&block_ids,
     const WindowAggregateFunction *window_aggregate_function,
     std::vector<std::unique_ptr<const Scalar>> &&arguments,
     std::vector<std::unique_ptr<const Scalar>> &&partition_by_attributes,
@@ -55,6 +56,7 @@ WindowAggregationOperationState::WindowAggregationOperationState(
     const std::int64_t num_following,
     StorageManager *storage_manager)
     : input_relation_(input_relation),
+      block_ids_(std::move(block_ids)),
       arguments_(std::move(arguments)),
       is_row_(is_row),
       num_preceding_(num_preceding),
@@ -82,7 +84,9 @@ WindowAggregationOperationState::WindowAggregationOperationState(
 
   // Create the handle and initial state.
   window_aggregation_handle_.reset(
-      window_aggregate_function->createHandle(std::move(argument_types),
+      window_aggregate_function->createHandle(input_relation_,
+                                              block_ids_,
+                                              std::move(argument_types),
                                               std::move(partition_by_types)));
 
 #ifdef QUICKSTEP_ENABLE_VECTOR_COPY_ELISION_SELECTION
@@ -108,6 +112,11 @@ WindowAggregationOperationState* WindowAggregationOperationState::ReconstructFro
     const CatalogDatabaseLite &database,
     StorageManager *storage_manager) {
   DCHECK(ProtoIsValid(proto, database));
+
+  std::vector<block_id> block_ids;
+  for (int block_idx = 0; block_idx < proto.block_ids_size(); ++block_idx) {
+    block_ids.push_back(proto.block_ids(block_idx));
+  }
 
   // Rebuild contructor arguments from their representation in 'proto'.
   const WindowAggregateFunction *window_aggregate_function
@@ -135,6 +144,7 @@ WindowAggregationOperationState* WindowAggregationOperationState::ReconstructFro
   const std::int64_t num_following = proto.num_following();
 
   return new WindowAggregationOperationState(database.getRelationSchemaById(proto.input_relation_id()),
+                                             std::move(block_ids),
                                              window_aggregate_function,
                                              std::move(arguments),
                                              std::move(partition_by_attributes),
@@ -185,17 +195,18 @@ bool WindowAggregationOperationState::ProtoIsValid(const serialization::WindowAg
 }
 
 void WindowAggregationOperationState::windowAggregateBlocks(
-    InsertDestination *output_destination,
-    const std::vector<block_id> &block_ids) {
+    InsertDestination *output_destination) {
   window_aggregation_handle_->calculate(arguments_,
-                                        block_ids,
                                         partition_by_ids_,
-                                        input_relation_,
                                         is_row_,
                                         num_preceding_,
                                         num_following_,
-                                        storage_manager_,
-                                        output_destination);
+                                        storage_manager_);
+  std::vector<ValueAccessor*> output_accessors(
+      window_aggregation_handle_->finalize(storage_manager_));
+  for (ValueAccessor* output_accessor : output_accessors) {
+    output_destination->bulkInsertTuples(output_accessor);
+  }
 }
 
 }  // namespace quickstep

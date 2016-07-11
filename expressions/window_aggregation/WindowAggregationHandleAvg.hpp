@@ -56,14 +56,13 @@ class WindowAggregationHandleAvg : public WindowAggregationHandle {
   ~WindowAggregationHandleAvg() override {}
 
   void calculate(const std::vector<std::unique_ptr<const Scalar>> &arguments,
-                 const std::vector<block_id> &block_ids,
                  const std::vector<attribute_id> &partition_by_ids,
-                 const CatalogRelationSchema &relation,
                  const bool is_row,
                  const std::int64_t num_preceding,
                  const std::int64_t num_following,
-                 StorageManager *storage_manager,
-                 InsertDestinationInterface *output_destination) const;
+                 StorageManager *storage_manager);
+
+  std::vector<ValueAccessor*>&& finalize(StorageManager *storage_manager);
 
  private:
   friend class WindowAggregateFunctionAvg;
@@ -79,7 +78,9 @@ class WindowAggregationHandleAvg : public WindowAggregationHandle {
    * @param storage_manager A pointer to the storage manager.
    * @param type Type of the avg value.
    **/
-  explicit WindowAggregationHandleAvg(const Type &type,
+  explicit WindowAggregationHandleAvg(const CatalogRelationSchema &relation,
+                                      const std::vector<block_id> &block_ids,
+                                      const Type &type,
                                       std::vector<const Type*> &&partition_key_types);
 
   TypedValue calculateOneWindow(

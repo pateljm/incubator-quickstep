@@ -25,6 +25,7 @@
 
 #include "catalog/CatalogTypedefs.hpp"
 #include "expressions/scalar/Scalar.hpp"
+#include "expressions/scalar/ScalarAttribute.hpp"
 #include "storage/InsertDestinationInterface.hpp"
 #include "storage/StorageBlock.hpp"
 #include "storage/StorageManager.hpp"
@@ -51,9 +52,12 @@ namespace quickstep {
 class StorageManager;
 
 WindowAggregationHandleAvg::WindowAggregationHandleAvg(
+    const CatalogRelationSchema &relation,
+    const std::vector<block_id> &block_ids,
     const Type &type,
     std::vector<const Type*> &&partition_key_types)
-    : argument_type_(type) {
+    : WindowAggregationHandle(relation, block_ids),
+      argument_type_(type) {
   // We sum Int as Long and Float as Double so that we have more headroom when
   // adding many values.
   TypeID type_id;
@@ -98,24 +102,20 @@ WindowAggregationHandleAvg::WindowAggregationHandleAvg(
 }
 
 void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<const Scalar>> &arguments,
-                                           const std::vector<block_id> &block_ids,
                                            const std::vector<attribute_id> &partition_by_ids,
-                                           const CatalogRelationSchema &relation,
                                            const bool is_row,
                                            const std::int64_t num_preceding,
                                            const std::int64_t num_following,
-                                           StorageManager *storage_manager,
-                                           InsertDestinationInterface *output_destination) const {
+                                           StorageManager *storage_manager) {
   DCHECK(arguments.size() == 1);
-  DCHECK(!block_ids.empty());
   
   // Initialize the tuple accessors and argument accessors.
   // Index of each value accessor indicates the block it belongs to.
   std::vector<ValueAccessor*> tuple_accessors;
   std::vector<ColumnVectorsValueAccessor*> argument_accessors;
-  for (block_id bid : block_ids) {
+  for (block_id bid : block_ids_) {
     // Get tuple accessor.
-    BlockReference block = storage_manager->getBlock(bid, relation);
+    BlockReference block = storage_manager->getBlock(bid, relation_);
     const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
     ValueAccessor *tuple_accessor = tuple_block.createValueAccessor();
     tuple_accessors.push_back(tuple_accessor);
@@ -132,12 +132,14 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
 
   // Create a window for each tuple and calculate the window aggregate.
   for (std::uint32_t current_block_index = 0;
-       current_block_index < block_ids.size();
+       current_block_index < block_ids_.size();
        ++current_block_index) {
     ValueAccessor *tuple_accessor = tuple_accessors[current_block_index];
     ColumnVectorsValueAccessor* argument_accessor =
         argument_accessors[current_block_index];
-    
+    NativeColumnVector window_aggregates_for_block(*result_type_,
+                                                   argument_accessor->getNumTuples());
+
     InvokeOnAnyValueAccessor (
         tuple_accessor,
         [&] (auto *tuple_accessor) -> void {
@@ -145,24 +147,48 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
       argument_accessor->beginIteration();
       
       while (tuple_accessor->next() && argument_accessor->next()) {
-        TypedValue window_aggregate = this->calculateOneWindow(tuple_accessors,
-                                                               argument_accessors,
-                                                               partition_by_ids,
-                                                               current_block_index,
-                                                               is_row,
-                                                               num_preceding,
-                                                               num_following);
-        Tuple *current_tuple = tuple_accessor->getTuple();
-        std::vector<TypedValue> new_tuple;
-        for (TypedValue value : *current_tuple) {
-          new_tuple.push_back(value);
-        }
-
-        new_tuple.push_back(window_aggregate);
-        output_destination->insertTupleInBatch(Tuple(std::move(new_tuple)));
+        const TypedValue window_aggregate = this->calculateOneWindow(tuple_accessors,
+                                                                     argument_accessors,
+                                                                     partition_by_ids,
+                                                                     current_block_index,
+                                                                     is_row,
+                                                                     num_preceding,
+                                                                     num_following);
+        window_aggregates_for_block.appendTypedValue(window_aggregate);
       }
     });
+
+    window_aggregates_.push_back(&window_aggregates_for_block);
   }
+}
+
+std::vector<ValueAccessor*>&& WindowAggregationHandleAvg::finalize(
+    StorageManager *storage_manager) {
+  std::vector<ValueAccessor*> accessors;
+  
+  // Create a ValueAccessor for each block, including the new window aggregate
+  // attribute.
+  for (std::size_t block_idx = 0; block_idx < block_ids_.size(); ++block_idx) {
+    // Get the block information.
+    BlockReference block = storage_manager->getBlock(block_idx, relation_);
+    const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
+    ValueAccessor *block_accessor = tuple_block.createValueAccessor();
+    SubBlocksReference sub_block_ref(tuple_block,
+                                     block->getIndices(),
+                                     block->getIndicesConsistent());
+    ColumnVectorsValueAccessor accessor;
+
+    for (CatalogRelationSchema::const_iterator attr_it = relation_.begin();
+         attr_it != relation_.end();
+         ++attr_it) {
+      ScalarAttribute scalar_attr(*attr_it);
+      accessor.addColumn(scalar_attr.getAllValues(block_accessor, &sub_block_ref));
+    }
+
+    accessors.push_back(&accessor);
+  }
+
+  return std::move(accessors);
 }
 
 TypedValue WindowAggregationHandleAvg::calculateOneWindow(
@@ -287,7 +313,7 @@ bool WindowAggregationHandleAvg::samePartition(
     const std::vector<attribute_id> &partition_by_ids) const {
   return InvokeOnAnyValueAccessor (tuple_accessor,
                                    [&] (auto *tuple_accessor) -> bool {
-    for (std::uint32_t partition_by_index = 0;
+    for (std::size_t partition_by_index = 0;
          partition_by_index < partition_by_ids.size();
          ++partition_by_index) {
       if (!equal_comparators_[partition_by_index]->compareTypedValues(

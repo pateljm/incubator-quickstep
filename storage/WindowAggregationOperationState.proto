@@ -24,6 +24,7 @@ import "expressions/Expressions.proto";
 
 message WindowAggregationOperationState {
   required int32 input_relation_id = 1;
+  repeated fixed64 block_ids = 2;
   required WindowAggregateFunction function = 3;
   repeated Scalar arguments = 4;
   repeated Scalar partition_by_attributes = 5;

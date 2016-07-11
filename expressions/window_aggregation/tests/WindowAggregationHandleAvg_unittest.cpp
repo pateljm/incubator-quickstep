@@ -51,12 +51,142 @@ namespace quickstep {
 
 namespace {
 
-  constexpr int kNumSamples = 100;
+  constexpr int kNumTuplesPerBlock = 100;
+  constexpr int kNumBlocks = 5;
+  constexpr int kNumTuplesPerPartition = 8;
 
 }  // namespace
 
-class WindowAggregationHandleAvgTest : public::testing::Test {
+// Attribute value could be null if set true.
+class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
  protected:
+  virtual void SetUp() {
+    // Initialize relation and storage manager.
+    relation_.reset(new CatalogRelation(NULL, "TestRelation", kRelationId));
+    storage_manager_.reset(new StorageManager("TestAvg"));
+
+    // Add All kinds of TypedValues.
+    CatalogAttribute *int_attr = new CatalogAttribute(relation_.get(),
+                                                      "int_attr",
+                                                      TypeFactory::GetType(kInt, GetParam()));
+
+    relation_->addAttribute(int_attr);
+
+    CatalogAttribute *float_attr = new CatalogAttribute(relation_.get(),
+                                                        "float_attr",
+                                                        TypeFactory::GetType(kFloat, GetParam()));
+    relation_->addAttribute(float_attr);
+
+    CatalogAttribute *long_attr = new CatalogAttribute(relation_.get(),
+                                                       "long_attr",
+                                                       TypeFactory::GetType(kLong, GetParam()));
+    relation_->addAttribute(long_attr);
+
+    CatalogAttribute *double_attr = new CatalogAttribute(relation_.get(),
+                                                         "double_attr",
+                                                         TypeFactory::GetType(kDouble, GetParam()));
+    relation_->addAttribute(double_attr);
+
+    CatalogAttribute *char_attr = new CatalogAttribute(relation_.get(),
+                                                       "char_attr",
+                                                       TypeFactory::GetType(kChar, 4, GetParam()));
+    relation_->addAttribute(char_attr);
+
+    CatalogAttribute *varchar_attr = new CatalogAttribute(relation_.get(),
+                                                          "varchar_attr",
+                                                          TypeFactory::GetType(kVarChar, 32, GetParam()));
+    relation_->addAttribute(varchar_attr);
+    
+    // Records the 'base_value' of a tuple used in createSampleTuple.
+    CatalogAttribute *partition_value = new CatalogAttribute(relation_.get(),
+                                                             "partition_value",
+                                                             TypeFactory::GetType(kInt, false));
+    relation_->addAttribute(partition_value);
+
+    StorageBlockLayout *layout = StorageBlockLayout::GenerateDefaultLayout(*relation_, true);
+
+    // Initialize blocks.
+    for (int i = 0; i < kNumBlocks; ++i) {
+      block_id bid = storage_manager_->createBlock(relation_, layout);
+      relation_->addBlock(bid);
+      insertTuples(bid);
+    }
+  }
+
+  // Insert kNumTuplesPerBlock tuples into the block.
+  void insertTuples(block_id bid) {
+    MutableBlockReference block = storage_manager_->getBlockMutable(bid, relation_);
+    for (int i = 0; i < kNumTuplesPerBlock; ++i) {
+      Tuple *tuple = createTuple(bid * kNumTuplesPerBlock + i);
+      block->insertTuple(*tuple);
+    }
+  }
+
+  Tuple* createTuple(int base_value) {
+    std::vector<TypedValue> attrs;
+
+    // int_attr.
+    if (GetParam() && base_value % 10 == 0) {
+      // Throw in a NULL integer for every ten values.
+      attrs.emplace_back(kInt);
+    } else {
+      attrs.emplace_back(base_value);
+    }
+
+    // float_attr.
+    if (GetParam() && base_value % 10 == 1) {
+      attrs.emplace_back(kFloat);
+    } else {
+      attrs.emplace_back(static_cast<float>(0.4 * base_value));
+    }
+
+    // long_attr.
+    if (GetParam() && base_value % 10 == 2) {
+      attrs.emplace_back(kLong);
+    } else {
+      attrs.emplace_back(static_cast<std::int64_t>(base_value));
+    }
+
+    // double_attr.
+    if (GetParam() && base_value % 10 == 3) {
+      attrs.emplace_back(kDouble);
+    } else {
+      attrs.emplace_back(static_cast<double>(0.25 * base_value));
+    }
+
+    // char_attr
+    if (GetParam() && base_value % 10 == 4) {
+      attrs.emplace_back(CharType::InstanceNullable(4).makeNullValue());
+    } else {
+      std::ostringstream char_buffer;
+      char_buffer << base_value;
+      std::string string_literal(char_buffer.str());
+      attrs.emplace_back(CharType::InstanceNonNullable(4).makeValue(
+          string_literal.c_str(),
+          string_literal.size() > 3 ? 4
+                                    : string_literal.size() + 1));
+      attrs.back().ensureNotReference();
+    }
+
+    // varchar_attr
+    if (GetParam() && base_value % 10 == 5) {
+      attrs.emplace_back(VarCharType::InstanceNullable(32).makeNullValue());
+    } else {
+      std::ostringstream char_buffer;
+      char_buffer << "Here are some numbers: " << base_value;
+      std::string string_literal(char_buffer.str());
+      attrs.emplace_back(VarCharType::InstanceNonNullable(32).makeValue(
+          string_literal.c_str(),
+          string_literal.size() + 1));
+      attrs.back().ensureNotReference();
+    }
+
+    // base_value
+    attrs.emplace_back(base_value / kNumTuplesPerPartition);
+    return new Tuple(std::move(attrs));
+}
+  }
+  
   // Handle initialization.
   void initializeHandle(const Type &argument_type,
                         const std::vector<const Type*> &partition_key_types) {
@@ -86,11 +216,13 @@ class WindowAggregationHandleAvgTest : public::testing::Test {
   }
 
   template <typename CppType>
-  static void CheckAvgValue(
-      CppType expected,
-      const AggregationHandle &handle,
-      const AggregationState &state) {
-    EXPECT_EQ(expected, handle.finalize(state).getLiteral<CppType>());
+  static void CheckAvgValues(
+      std::vector<CppType> expected,
+      const ColumnVector* actual) {
+    EXPECT_EQ(expected.size(), actual->size());
+    for (std::size_t i = 0; i < expected.size(); ++i) {
+      EXPECT_EQ(expected[i], actual->getTypedValue(i).getLiteral<CppType>());
+    }
   }
 
   // Static templated method for set a meaningful value to data types.
@@ -237,6 +369,8 @@ class WindowAggregationHandleAvgTest : public::testing::Test {
   std::unique_ptr<AggregationHandle> aggregation_handle_avg_;
   std::unique_ptr<AggregationState> aggregation_handle_avg_state_;
   std::unique_ptr<StorageManager> storage_manager_;
+  std::unique_ptr<CatalogRelation> relation_;
+  std::vector<block_id> block_ids_;
 };
 
 const int AggregationHandleAvgTest::kNumSamples;

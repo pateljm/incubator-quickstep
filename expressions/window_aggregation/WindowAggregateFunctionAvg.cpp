@@ -72,13 +72,17 @@ const Type* WindowAggregateFunctionAvg::resultTypeForArgumentTypes(
 }
 
 WindowAggregationHandle* WindowAggregateFunctionAvg::createHandle(
+    const CatalogRelationSchema &relation,
+    const std::vector<block_id> block_ids,
     std::vector<const Type*> &&argument_types,
     std::vector<const Type*> &&partition_key_types) const {
   DCHECK(canApplyToTypes(argument_types))
       << "Attempted to create an WindowAggregationHandleAvg for argument Type(s)"
       << " that AVG can not be applied to.";
 
-  return new WindowAggregationHandleAvg(*argument_types.front(),
+  return new WindowAggregationHandleAvg(relation,
+                                        block_ids,
+                                        *argument_types.front(),
                                         std::move(partition_key_types));
 }
 
