@@ -865,6 +865,7 @@ void ExecutionGenerator::convertHashJoin(const P::HashJoinPtr &physical_plan) {
                                            std::move(probe_original_attribute_ids),
                                            join_hash_table_index,
                                            star_schema_cost_model_->estimateCardinality(build_physical));
+  }
 }
 
 void ExecutionGenerator::convertNestedLoopsJoin(
