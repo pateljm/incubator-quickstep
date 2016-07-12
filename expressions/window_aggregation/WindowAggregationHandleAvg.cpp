@@ -121,13 +121,13 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
     tuple_accessors.push_back(tuple_accessor);
 
     // Get argument accessor.
-    ColumnVectorsValueAccessor argument_accessor;
+    ColumnVectorsValueAccessor *argument_accessor = new ColumnVectorsValueAccessor();
     SubBlocksReference sub_block_ref(tuple_block,
                                      block->getIndices(),
                                      block->getIndicesConsistent());
-    argument_accessor.addColumn(
+    argument_accessor->addColumn(
         arguments.front()->getAllValues(tuple_accessor, &sub_block_ref));
-    argument_accessors.push_back(&argument_accessor);
+    argument_accessors.push_back(argument_accessor);
   }
 
   // Create a window for each tuple and calculate the window aggregate.
@@ -137,8 +137,8 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
     ValueAccessor *tuple_accessor = tuple_accessors[current_block_index];
     ColumnVectorsValueAccessor* argument_accessor =
         argument_accessors[current_block_index];
-    NativeColumnVector window_aggregates_for_block(*result_type_,
-                                                   argument_accessor->getNumTuples());
+    NativeColumnVector* window_aggregates_for_block =
+        new NativeColumnVector(*result_type_, argument_accessor->getNumTuples());
 
     InvokeOnAnyValueAccessor (
         tuple_accessor,
@@ -154,15 +154,15 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
                                                                      is_row,
                                                                      num_preceding,
                                                                      num_following);
-        window_aggregates_for_block.appendTypedValue(window_aggregate);
+        window_aggregates_for_block->appendTypedValue(window_aggregate);
       }
     });
 
-    window_aggregates_.push_back(&window_aggregates_for_block);
+    window_aggregates_.push_back(window_aggregates_for_block);
   }
 }
 
-std::vector<ValueAccessor*>&& WindowAggregationHandleAvg::finalize(
+std::vector<ValueAccessor*> WindowAggregationHandleAvg::finalize(
     StorageManager *storage_manager) {
   std::vector<ValueAccessor*> accessors;
   
@@ -170,25 +170,30 @@ std::vector<ValueAccessor*>&& WindowAggregationHandleAvg::finalize(
   // attribute.
   for (std::size_t block_idx = 0; block_idx < block_ids_.size(); ++block_idx) {
     // Get the block information.
-    BlockReference block = storage_manager->getBlock(block_idx, relation_);
+    BlockReference block = storage_manager->getBlock(block_ids_[block_idx],
+                                                     relation_);
     const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
     ValueAccessor *block_accessor = tuple_block.createValueAccessor();
     SubBlocksReference sub_block_ref(tuple_block,
                                      block->getIndices(),
                                      block->getIndicesConsistent());
-    ColumnVectorsValueAccessor accessor;
+    ColumnVectorsValueAccessor* accessor = new ColumnVectorsValueAccessor();
 
+    // Add all attributes in the original relation.
     for (CatalogRelationSchema::const_iterator attr_it = relation_.begin();
          attr_it != relation_.end();
          ++attr_it) {
       ScalarAttribute scalar_attr(*attr_it);
-      accessor.addColumn(scalar_attr.getAllValues(block_accessor, &sub_block_ref));
+      accessor->addColumn(scalar_attr.getAllValues(block_accessor, &sub_block_ref));
     }
 
-    accessors.push_back(&accessor);
+    // Add the window aggregate attribute
+    accessor->addColumn(window_aggregates_[block_idx]);
+
+    accessors.push_back(accessor);
   }
 
-  return std::move(accessors);
+  return accessors;
 }
 
 TypedValue WindowAggregationHandleAvg::calculateOneWindow(
@@ -203,8 +208,14 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
   ValueAccessor *tuple_accessor = tuple_accessors[current_block_index];
   ColumnVectorsValueAccessor *argument_accessor = argument_accessors[current_block_index];
   TypedValue sum = sum_type_->makeZeroValue();
+  TypedValue current_value = argument_accessor->getTypedValue(0);
+  // If current value is null, return null.
+  if (current_value.isNull()) {
+    return TypedValue(result_type_->getTypeID());
+  }
+  
   sum = fast_add_operator_->
-      applyToTypedValues(sum, argument_accessor->getTypedValue(0));
+      applyToTypedValues(sum, current_value);
   std::uint64_t count = 1;
   
   // Get the partition key for the current row.
@@ -230,10 +241,10 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
     // changed to "while".
     if (preceding_tuple_id < 0) {
       // First tuple of the first block, no more preceding blocks.
-      preceding_block_index--;
-      if (preceding_block_index < 0) {
+      if (preceding_block_index == 0) {
         break;
       }
+      preceding_block_index--;
 
       tuple_accessor = tuple_accessors[preceding_block_index];
       argument_accessor = argument_accessors[preceding_block_index];
@@ -252,9 +263,15 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
 
     // Actually count the element and do the calculation.
     count_preceding++;
-    sum = fast_add_operator_->applyToTypedValues(
-              sum,
-              argument_accessor->getTypedValueAtAbsolutePosition(0, preceding_tuple_id));
+    TypedValue preceding_value =
+        argument_accessor->getTypedValueAtAbsolutePosition(0, preceding_tuple_id);
+        
+    // If a null value is in the window, return a null value.
+    if (preceding_value.isNull()) {
+      return TypedValue(result_type_->getTypeID());
+    }
+    
+    sum = fast_add_operator_->applyToTypedValues(sum, preceding_value);
   }
 
   count += count_preceding;
@@ -294,9 +311,15 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
 
     // Actually count the element and do the calculation.
     count_following++;
-    sum = fast_add_operator_->applyToTypedValues(
-              sum,
-              argument_accessor->getTypedValueAtAbsolutePosition(0, following_tuple_id));
+    TypedValue following_value =
+        argument_accessor->getTypedValueAtAbsolutePosition(0, following_tuple_id);
+        
+    // If a null value is in the window, return a null value.
+    if (following_value.isNull()) {
+      return TypedValue(result_type_->getTypeID());
+    }
+    
+    sum = fast_add_operator_->applyToTypedValues(sum, following_value);
   }
 
   count += count_following;

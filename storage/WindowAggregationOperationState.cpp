@@ -202,8 +202,10 @@ void WindowAggregationOperationState::windowAggregateBlocks(
                                         num_preceding_,
                                         num_following_,
                                         storage_manager_);
+
   std::vector<ValueAccessor*> output_accessors(
       window_aggregation_handle_->finalize(storage_manager_));
+
   for (ValueAccessor* output_accessor : output_accessors) {
     output_destination->bulkInsertTuples(output_accessor);
   }

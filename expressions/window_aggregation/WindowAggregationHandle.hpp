@@ -105,7 +105,7 @@ class WindowAggregationHandle {
                          const std::int64_t num_following,
                          StorageManager *storage_manager) = 0;
 
-  virtual std::vector<ValueAccessor*>&& finalize(StorageManager *storage_manager) = 0;
+  virtual std::vector<ValueAccessor*> finalize(StorageManager *storage_manager) = 0;
 
  protected:
   /**

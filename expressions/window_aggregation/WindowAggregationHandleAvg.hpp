@@ -62,7 +62,7 @@ class WindowAggregationHandleAvg : public WindowAggregationHandle {
                  const std::int64_t num_following,
                  StorageManager *storage_manager);
 
-  std::vector<ValueAccessor*>&& finalize(StorageManager *storage_manager);
+  std::vector<ValueAccessor*> finalize(StorageManager *storage_manager);
 
  private:
   friend class WindowAggregateFunctionAvg;

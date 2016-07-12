@@ -44,23 +44,21 @@ add_library(quickstep_expressions_windowaggregation_WindowAggregationID
 # Link dependencies:
 target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregateFunction
                       glog
+                      quickstep_catalog_CatalogTypedefs
                       quickstep_expressions_windowaggregation_WindowAggregateFunction_proto
                       quickstep_expressions_windowaggregation_WindowAggregationID
-                      quickstep_utility_Macros)
-target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationHandle
-                      glog
-                      quickstep_catalog_CatalogTypedefs
-                      quickstep_storage_HashTableBase
-                      quickstep_types_TypedValue
+                      quickstep_storage_StorageBlockInfo
                       quickstep_utility_Macros)
 target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregateFunction_proto
                       ${PROTOBUF_LIBRARY})
 target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregateFunctionFactory
+                      glog
                       quickstep_expressions_windowaggregation_WindowAggregateFunctionAvg
                       quickstep_expressions_windowaggregation_WindowAggregateFunction_proto
                       quickstep_expressions_windowaggregation_WindowAggregationID
                       quickstep_utility_Macros)
 target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregateFunctionAvg
+                      glog
                       quickstep_expressions_windowaggregation_WindowAggregateFunction
                       quickstep_expressions_windowaggregation_WindowAggregationHandleAvg
                       quickstep_expressions_windowaggregation_WindowAggregationID
@@ -71,15 +69,35 @@ target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregateFun
                       quickstep_types_operations_binaryoperations_BinaryOperationFactory
                       quickstep_types_operations_binaryoperations_BinaryOperationID
                       quickstep_utility_Macros)
-target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationHandleAvg
+target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationHandle
+                      glog
+                      quickstep_catalog_CatalogRelationSchema
                       quickstep_catalog_CatalogTypedefs
+                      quickstep_storage_StorageBlockInfo
+                      quickstep_types_TypedValue
+                      quickstep_utility_Macros)
+target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationHandleAvg
+                      glog
+                      quickstep_catalog_CatalogTypedefs
+                      quickstep_expressions_scalar_Scalar
+                      quickstep_expressions_scalar_ScalarAttribute
                       quickstep_expressions_windowaggregation_WindowAggregationHandle
+                      quickstep_storage_InsertDestinationInterface
+                      quickstep_storage_StorageBlock
+                      quickstep_storage_StorageManager
+                      quickstep_storage_SubBlocksReference
+                      quickstep_storage_TupleStorageSubBlock
+                      quickstep_storage_ValueAccessor
+                      quickstep_storage_ValueAccessorUtil
                       quickstep_types_Type
                       quickstep_types_TypeFactory
                       quickstep_types_TypeID
                       quickstep_types_TypedValue
-                      quickstep_types_containers_ColumnVector
+                      quickstep_types_containers_ColumnVectorsValueAccessor
                       quickstep_types_operations_binaryoperations_BinaryOperation
                       quickstep_types_operations_binaryoperations_BinaryOperationFactory
                       quickstep_types_operations_binaryoperations_BinaryOperationID
+                      quickstep_types_operations_comparisons_Comparison
+                      quickstep_types_operations_comparisons_ComparisonFactory
+                      quickstep_types_operations_comparisons_ComparisonID
                       quickstep_utility_Macros)
