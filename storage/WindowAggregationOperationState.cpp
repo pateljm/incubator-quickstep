@@ -72,10 +72,9 @@ WindowAggregationOperationState::WindowAggregationOperationState(
   DCHECK(window_aggregate_function->canApplyToTypes(argument_types));
 
   // IDs and types of partition keys.
-  std::vector<attribute_id> partition_by_ids;
   std::vector<const Type*> partition_by_types;
   for (const std::unique_ptr<const Scalar> &partition_by_attribute : partition_by_attributes) {
-    partition_by_ids.push_back(
+    partition_by_ids_.push_back(
         partition_by_attribute->getAttributeIdForValueAccessor());
     partition_by_types.push_back(&partition_by_attribute->getType());
   }
