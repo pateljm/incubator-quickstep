@@ -53,10 +53,9 @@ class StorageManager;
 
 WindowAggregationHandleAvg::WindowAggregationHandleAvg(
     const CatalogRelationSchema &relation,
-    const std::vector<block_id> &block_ids,
     const Type &type,
     std::vector<const Type*> &&partition_key_types)
-    : WindowAggregationHandle(relation, block_ids),
+    : WindowAggregationHandle(relation),
       argument_type_(type) {
   // We sum Int as Long and Float as Double so that we have more headroom when
   // adding many values.
@@ -101,7 +100,8 @@ WindowAggregationHandleAvg::WindowAggregationHandleAvg(
   }
 }
 
-void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<const Scalar>> &arguments,
+void WindowAggregationHandleAvg::calculate(const std::vector<block_id> &block_ids,
+                                           const std::vector<std::unique_ptr<const Scalar>> &arguments,
                                            const std::vector<attribute_id> &partition_by_ids,
                                            const bool is_row,
                                            const std::int64_t num_preceding,
@@ -113,7 +113,7 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
   // Index of each value accessor indicates the block it belongs to.
   std::vector<ValueAccessor*> tuple_accessors;
   std::vector<ColumnVectorsValueAccessor*> argument_accessors;
-  for (block_id bid : block_ids_) {
+  for (block_id bid : block_ids) {
     // Get tuple accessor.
     BlockReference block = storage_manager->getBlock(bid, relation_);
     const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
@@ -132,7 +132,7 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
 
   // Create a window for each tuple and calculate the window aggregate.
   for (std::uint32_t current_block_index = 0;
-       current_block_index < block_ids_.size();
+       current_block_index < block_ids.size();
        ++current_block_index) {
     ValueAccessor *tuple_accessor = tuple_accessors[current_block_index];
     ColumnVectorsValueAccessor* argument_accessor =
@@ -147,7 +147,8 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
       argument_accessor->beginIteration();
       
       while (tuple_accessor->next() && argument_accessor->next()) {
-        const TypedValue window_aggregate = this->calculateOneWindow(tuple_accessors,
+        const TypedValue window_aggregate = this->calculateOneWindow(block_ids,
+                                                                     tuple_accessors,
                                                                      argument_accessors,
                                                                      partition_by_ids,
                                                                      current_block_index,
@@ -163,14 +164,15 @@ void WindowAggregationHandleAvg::calculate(const std::vector<std::unique_ptr<con
 }
 
 std::vector<ValueAccessor*> WindowAggregationHandleAvg::finalize(
+    const std::vector<block_id> &block_ids,
     StorageManager *storage_manager) {
   std::vector<ValueAccessor*> accessors;
   
   // Create a ValueAccessor for each block, including the new window aggregate
   // attribute.
-  for (std::size_t block_idx = 0; block_idx < block_ids_.size(); ++block_idx) {
+  for (std::size_t block_idx = 0; block_idx < block_ids.size(); ++block_idx) {
     // Get the block information.
-    BlockReference block = storage_manager->getBlock(block_ids_[block_idx],
+    BlockReference block = storage_manager->getBlock(block_ids[block_idx],
                                                      relation_);
     const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
     ValueAccessor *block_accessor = tuple_block.createValueAccessor();
@@ -197,6 +199,7 @@ std::vector<ValueAccessor*> WindowAggregationHandleAvg::finalize(
 }
 
 TypedValue WindowAggregationHandleAvg::calculateOneWindow(
+    const std::vector<block_id> &block_ids,
     std::vector<ValueAccessor*> &tuple_accessors,
     std::vector<ColumnVectorsValueAccessor*> &argument_accessors,
     const std::vector<attribute_id> &partition_by_ids,

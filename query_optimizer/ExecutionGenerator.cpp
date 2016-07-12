@@ -1656,11 +1656,6 @@ void ExecutionGenerator::convertWindowAggregate(
       findRelationInfoOutputByPhysical(physical_plan->input());
   window_aggr_state_proto->set_input_relation_id(input_relation_info->relation->getID());
 
-  // Get relation blocks.
-  for (block_id bid : input_relation_info->relation->getBlocksSnapshot()) {
-    window_aggr_state_proto->add_block_ids(bid);
-  }
-
   // Get window aggregate function expression.
   const E::AliasPtr &named_window_aggregate_expression =
       physical_plan->window_aggregate_expression();

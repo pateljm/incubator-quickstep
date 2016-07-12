@@ -131,7 +131,6 @@ class WindowAggregateFunction {
    **/
   virtual WindowAggregationHandle* createHandle(
       const CatalogRelationSchema &relation,
-      const std::vector<block_id> block_ids,
       std::vector<const Type*> &&argument_types,
       std::vector<const Type*> &&partition_key_types) const = 0;
 

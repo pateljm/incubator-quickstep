@@ -67,7 +67,6 @@ class WindowAggregationOperationState {
    *        tables.
    */
   WindowAggregationOperationState(const CatalogRelationSchema &input_relation,
-                                  std::vector<block_id> &&block_ids,
                                   const WindowAggregateFunction *window_aggregate_function,
                                   std::vector<std::unique_ptr<const Scalar>> &&arguments,
                                   std::vector<std::unique_ptr<const Scalar>> &&partition_by_attributes,
@@ -113,7 +112,8 @@ class WindowAggregationOperationState {
    * @param output_destination The output destination for the computed window
    *                           aggregate.
    **/
-  void windowAggregateBlocks(InsertDestination *output_destination);
+  void windowAggregateBlocks(InsertDestination *output_destination,
+                             const std::vector<block_id> &block_ids);
 
  private:
   const CatalogRelationSchema &input_relation_;

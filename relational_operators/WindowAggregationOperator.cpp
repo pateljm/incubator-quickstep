@@ -42,11 +42,13 @@ bool WindowAggregationOperator::getAllWorkOrders(
   DCHECK(query_context != nullptr);
 
   if (blocking_dependencies_met_ && !generated_) {
+    std::vector<block_id> relation_blocks = input_relation_.getBlocksSnapshot();
+    
     container->addNormalWorkOrder(
         new WindowAggregationWorkOrder(
             query_id_,
             query_context->releaseWindowAggregationState(window_aggregation_state_index_),
-            block_ids_,
+            std::move(relation_blocks),
             query_context->getInsertDestination(output_destination_index_)),
         op_index_);
     generated_ = true;
@@ -70,7 +72,9 @@ serialization::WorkOrder* WindowAggregationOperator::createWorkOrderProto() {
   proto->set_query_id(query_id_);
   proto->SetExtension(serialization::WindowAggregationWorkOrder::window_aggr_state_index,
                       window_aggregation_state_index_);
-  for (block_id bid : block_ids_) {
+                      
+  std::vector<block_id> relation_blocks = input_relation_.getBlocksSnapshot();
+  for (block_id bid : relation_blocks) {
     proto->AddExtension(serialization::WindowAggregationWorkOrder::block_ids, bid);
   }
   proto->SetExtension(serialization::WindowAggregationWorkOrder::insert_destination_index,
@@ -81,7 +85,8 @@ serialization::WorkOrder* WindowAggregationOperator::createWorkOrderProto() {
 
 
 void WindowAggregationWorkOrder::execute() {
-  state_->windowAggregateBlocks(output_destination_);
+  state_->windowAggregateBlocks(output_destination_,
+                                block_ids_);
 }
 
 }  // namespace quickstep
