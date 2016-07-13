@@ -55,16 +55,14 @@ class WindowAggregationHandleAvg : public WindowAggregationHandle {
  public:
   ~WindowAggregationHandleAvg() override {}
 
-  void calculate(const std::vector<block_id> &block_ids,
-                 const std::vector<std::unique_ptr<const Scalar>> &arguments,
+  void calculate(ColumnVectorsValueAccessor* block_accessors,
+                 std::vector<ColumnVector*> &&arguments,
                  const std::vector<attribute_id> &partition_by_ids,
                  const bool is_row,
                  const std::int64_t num_preceding,
-                 const std::int64_t num_following,
-                 StorageManager *storage_manager);
+                 const std::int64_t num_following);
 
-  std::vector<ValueAccessor*> finalize(const std::vector<block_id> &block_ids,
-                                       StorageManager *storage_manager) override;
+  ValueAccessor* finalize() override;
 
  private:
   friend class WindowAggregateFunctionAvg;
@@ -81,21 +79,17 @@ class WindowAggregationHandleAvg : public WindowAggregationHandle {
    * @param type Type of the avg value.
    **/
   explicit WindowAggregationHandleAvg(const CatalogRelationSchema &relation,
-                                      const Type &type,
-                                      std::vector<const Type*> &&partition_key_types);
+                                      std::vector<const Type*> &&partition_key_types,
+                                      const Type &type);
 
   TypedValue calculateOneWindow(
-      const std::vector<block_id> &block_ids,
-      std::vector<ValueAccessor*> &tuple_accessors,
-      std::vector<ColumnVectorsValueAccessor*> &argument_accessors,
+      ColumnVectorsValueAccessor *argument_accessor,
       const std::vector<attribute_id> &partition_by_ids,
-      const std::uint32_t current_block_index,
       const bool is_row,
       const std::int64_t num_preceding,
       const std::int64_t num_following) const;
 
   bool samePartition(const std::vector<TypedValue> &current_row_partition_key,
-                     ValueAccessor *tuple_accessor,
                      const tuple_id boundary_tuple_id,
                      const std::vector<attribute_id> &partition_by_ids) const;
 
@@ -104,7 +98,6 @@ class WindowAggregationHandleAvg : public WindowAggregationHandle {
   const Type *result_type_;
   std::unique_ptr<UncheckedBinaryOperator> fast_add_operator_;
   std::unique_ptr<UncheckedBinaryOperator> divide_operator_;
-  std::vector<std::unique_ptr<UncheckedComparator>> equal_comparators_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowAggregationHandleAvg);
 };

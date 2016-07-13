@@ -1059,10 +1059,16 @@ target_link_libraries(quickstep_storage_WindowAggregationOperationState
                       quickstep_expressions_windowaggregation_WindowAggregateFunctionFactory
                       quickstep_expressions_windowaggregation_WindowAggregationHandle
                       quickstep_expressions_windowaggregation_WindowAggregationID
-                      quickstep_storage_StorageBlockInfo
                       quickstep_storage_InsertDestination
+                      quickstep_storage_StorageBlockInfo
                       quickstep_storage_StorageManager
+                      quickstep_storage_SubBlocksReference
+                      quickstep_storage_ValueAccessor
+                      quickstep_storage_ValueAccessorUtil
                       quickstep_storage_WindowAggregationOperationState_proto
+                      quickstep_types_containers_ColumnVector
+                      quickstep_types_containers_ColumnVectorUtil
+                      quickstep_types_containers_ColumnVectorsValueAccessor
                       quickstep_utility_Macros)
 target_link_libraries(quickstep_storage_WindowAggregationOperationState_proto
                       quickstep_expressions_Expressions_proto

@@ -27,10 +27,6 @@
 #include "expressions/scalar/Scalar.hpp"
 #include "expressions/scalar/ScalarAttribute.hpp"
 #include "storage/InsertDestinationInterface.hpp"
-#include "storage/StorageBlock.hpp"
-#include "storage/StorageManager.hpp"
-#include "storage/SubBlocksReference.hpp"
-#include "storage/TupleStorageSubBlock.hpp"
 #include "storage/ValueAccessor.hpp"
 #include "storage/ValueAccessorUtil.hpp"
 #include "types/Type.hpp"
@@ -42,8 +38,6 @@
 #include "types/operations/binary_operations/BinaryOperationFactory.hpp"
 #include "types/operations/binary_operations/BinaryOperationID.hpp"
 #include "types/operations/comparisons/Comparison.hpp"
-#include "types/operations/comparisons/ComparisonFactory.hpp"
-#include "types/operations/comparisons/ComparisonID.hpp"
 
 #include "glog/logging.h"
 
@@ -53,9 +47,9 @@ class StorageManager;
 
 WindowAggregationHandleAvg::WindowAggregationHandleAvg(
     const CatalogRelationSchema &relation,
-    const Type &type,
-    std::vector<const Type*> &&partition_key_types)
-    : WindowAggregationHandle(relation),
+    std::vector<const Type*> &&partition_key_types,
+    const Type &type)
+    : WindowAggregationHandle(relation, std::move(partition_key_types)),
       argument_type_(type) {
   // We sum Int as Long and Float as Double so that we have more headroom when
   // adding many values.
@@ -92,130 +86,60 @@ WindowAggregationHandleAvg::WindowAggregationHandleAvg(
   divide_operator_.reset(
       BinaryOperationFactory::GetBinaryOperation(BinaryOperationID::kDivide)
           .makeUncheckedBinaryOperatorForTypes(*sum_type_, TypeFactory::GetType(kDouble)));
-  // Comparison operators for checking if two tuples belong to the same partition.
-  for (const Type *partition_key_type : partition_key_types) {
-    equal_comparators_.emplace_back(
-        ComparisonFactory::GetComparison(ComparisonID::kEqual)
-            .makeUncheckedComparatorForTypes(*partition_key_type, *partition_key_type));
-  }
 }
 
-void WindowAggregationHandleAvg::calculate(const std::vector<block_id> &block_ids,
-                                           const std::vector<std::unique_ptr<const Scalar>> &arguments,
+void WindowAggregationHandleAvg::calculate(ColumnVectorsValueAccessor *tuple_accessor,
+                                           std::vector<ColumnVector*> &&arguments,
                                            const std::vector<attribute_id> &partition_by_ids,
                                            const bool is_row,
                                            const std::int64_t num_preceding,
-                                           const std::int64_t num_following,
-                                           StorageManager *storage_manager) {
+                                           const std::int64_t num_following) {
   DCHECK(arguments.size() == 1);
+  DCHECK(arguments[0]->isNative());
+  DCHECK(static_cast<std::size_t>(tuple_accessor->getNumTuples()) ==
+         static_cast<const NativeColumnVector*>(arguments[0])->size());
+
+  tuple_accessor_.reset(tuple_accessor);
   
-  // Initialize the tuple accessors and argument accessors.
-  // Index of each value accessor indicates the block it belongs to.
-  std::vector<ValueAccessor*> tuple_accessors;
-  std::vector<ColumnVectorsValueAccessor*> argument_accessors;
-  for (block_id bid : block_ids) {
-    // Get tuple accessor.
-    BlockReference block = storage_manager->getBlock(bid, relation_);
-    const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
-    ValueAccessor *tuple_accessor = tuple_block.createValueAccessor();
-    tuple_accessors.push_back(tuple_accessor);
-
-    // Get argument accessor.
-    ColumnVectorsValueAccessor *argument_accessor = new ColumnVectorsValueAccessor();
-    SubBlocksReference sub_block_ref(tuple_block,
-                                     block->getIndices(),
-                                     block->getIndicesConsistent());
-    argument_accessor->addColumn(
-        arguments.front()->getAllValues(tuple_accessor, &sub_block_ref));
-    argument_accessors.push_back(argument_accessor);
-  }
-
+  // Initialize the output column and argument accessor.
+  window_aggregates_.reset(
+      new NativeColumnVector(*result_type_, tuple_accessor->getNumTuples()));
+  ColumnVectorsValueAccessor* argument_accessor = new ColumnVectorsValueAccessor();
+  argument_accessor->addColumn(arguments[0]);
+  
   // Create a window for each tuple and calculate the window aggregate.
-  for (std::uint32_t current_block_index = 0;
-       current_block_index < block_ids.size();
-       ++current_block_index) {
-    ValueAccessor *tuple_accessor = tuple_accessors[current_block_index];
-    ColumnVectorsValueAccessor* argument_accessor =
-        argument_accessors[current_block_index];
-    NativeColumnVector* window_aggregates_for_block =
-        new NativeColumnVector(*result_type_, argument_accessor->getNumTuples());
-
-    InvokeOnAnyValueAccessor (
-        tuple_accessor,
-        [&] (auto *tuple_accessor) -> void {
-      tuple_accessor->beginIteration();
-      argument_accessor->beginIteration();
+  tuple_accessor->beginIteration();
+  argument_accessor->beginIteration();
       
-      while (tuple_accessor->next() && argument_accessor->next()) {
-        const TypedValue window_aggregate = this->calculateOneWindow(block_ids,
-                                                                     tuple_accessors,
-                                                                     argument_accessors,
-                                                                     partition_by_ids,
-                                                                     current_block_index,
-                                                                     is_row,
-                                                                     num_preceding,
-                                                                     num_following);
-        window_aggregates_for_block->appendTypedValue(window_aggregate);
-      }
-    });
-
-    window_aggregates_.push_back(window_aggregates_for_block);
+  while (tuple_accessor_->next() && argument_accessor->next()) {
+    const TypedValue window_aggregate = this->calculateOneWindow(argument_accessor,
+                                                                 partition_by_ids,
+                                                                 is_row,
+                                                                 num_preceding,
+                                                                 num_following);
+    window_aggregates_->appendTypedValue(window_aggregate);
   }
 }
 
-std::vector<ValueAccessor*> WindowAggregationHandleAvg::finalize(
-    const std::vector<block_id> &block_ids,
-    StorageManager *storage_manager) {
-  std::vector<ValueAccessor*> accessors;
-  
-  // Create a ValueAccessor for each block, including the new window aggregate
-  // attribute.
-  for (std::size_t block_idx = 0; block_idx < block_ids.size(); ++block_idx) {
-    // Get the block information.
-    BlockReference block = storage_manager->getBlock(block_ids[block_idx],
-                                                     relation_);
-    const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
-    ValueAccessor *block_accessor = tuple_block.createValueAccessor();
-    SubBlocksReference sub_block_ref(tuple_block,
-                                     block->getIndices(),
-                                     block->getIndicesConsistent());
-    ColumnVectorsValueAccessor* accessor = new ColumnVectorsValueAccessor();
-
-    // Add all attributes in the original relation.
-    for (CatalogRelationSchema::const_iterator attr_it = relation_.begin();
-         attr_it != relation_.end();
-         ++attr_it) {
-      ScalarAttribute scalar_attr(*attr_it);
-      accessor->addColumn(scalar_attr.getAllValues(block_accessor, &sub_block_ref));
-    }
-
-    // Add the window aggregate attribute
-    accessor->addColumn(window_aggregates_[block_idx]);
-
-    accessors.push_back(accessor);
-  }
-
-  return accessors;
+ValueAccessor* WindowAggregationHandleAvg::finalize() {
+  tuple_accessor_->addColumn(window_aggregates_.release());
+  return tuple_accessor_.get();
 }
 
 TypedValue WindowAggregationHandleAvg::calculateOneWindow(
-    const std::vector<block_id> &block_ids,
-    std::vector<ValueAccessor*> &tuple_accessors,
-    std::vector<ColumnVectorsValueAccessor*> &argument_accessors,
+    ColumnVectorsValueAccessor *argument_accessor,
     const std::vector<attribute_id> &partition_by_ids,
-    const std::uint32_t current_block_index,
     const bool is_row,
     const std::int64_t num_preceding,
     const std::int64_t num_following) const {
-  // Initialize.
-  ValueAccessor *tuple_accessor = tuple_accessors[current_block_index];
-  ColumnVectorsValueAccessor *argument_accessor = argument_accessors[current_block_index];
-  TypedValue sum = sum_type_->makeZeroValue();
-  TypedValue current_value = argument_accessor->getTypedValue(0);
   // If current value is null, return null.
-  if (current_value.isNull()) {
+  if (argument_accessor->getTypedValue(0).isNull()) {
     return TypedValue(result_type_->getTypeID());
   }
+
+  // Initialize.
+  TypedValue sum = sum_type_->makeZeroValue();
+  TypedValue current_value = argument_accessor->getTypedValue(0);
   
   sum = fast_add_operator_->
       applyToTypedValues(sum, current_value);
@@ -225,44 +149,30 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
   std::vector<TypedValue> current_row_partition_key;
   for (attribute_id partition_by_id : partition_by_ids) {
     current_row_partition_key.push_back(
-        tuple_accessor->getTypedValueVirtual(partition_by_id));
+        tuple_accessor_->getTypedValue(partition_by_id));
   }
 
   // Get current position.
-  tuple_id current_tuple_id = tuple_accessor->getCurrentPositionVirtual();
+  tuple_id current_tuple_id = tuple_accessor_->getCurrentPositionVirtual();
   
   // Find preceding tuples.
   int count_preceding = 0;
   tuple_id preceding_tuple_id = current_tuple_id;
-  block_id preceding_block_index = current_block_index;
   while (num_preceding == -1 || count_preceding < num_preceding) {
     preceding_tuple_id--;
 
-    // If the preceding tuple locates in the previous block, move to the
-    // previous block and continue searching.
-    // TODO(Shixuan): If it is possible to have empty blocks, "if" has to be
-    // changed to "while".
+    // No more preceding tuples.
     if (preceding_tuple_id < 0) {
-      // First tuple of the first block, no more preceding blocks.
-      if (preceding_block_index == 0) {
-        break;
-      }
-      preceding_block_index--;
-
-      tuple_accessor = tuple_accessors[preceding_block_index];
-      argument_accessor = argument_accessors[preceding_block_index];
-      preceding_tuple_id = argument_accessor->getNumTuples() - 1;
+      break;
     }
 
     // Get the partition keys and compare. If not the same partition as the
-    // current row, end searching preceding tuples.
+    // current row, stop searching preceding tuples.
     if (!samePartition(current_row_partition_key,
-                       tuple_accessor,
                        preceding_tuple_id,
                        partition_by_ids)) {
       break;
     }
-
 
     // Actually count the element and do the calculation.
     count_preceding++;
@@ -282,35 +192,21 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
   // Find following tuples.
   int count_following = 0;
   tuple_id following_tuple_id = current_tuple_id;
-  block_id following_block_index = current_block_index;
   while (num_following == -1 || count_following < num_following) {
     following_tuple_id++;
 
-    // If the following tuple locates in the next block, move to the next block
-    // and continue searching.
-    // TODO(Shixuan): If it is possible to have empty blocks, "if" has to be
-    // changed to "while".
-    if (following_tuple_id >= argument_accessor->getNumTuples()) {
-      following_block_index++;
-      // Last tuple of the last block, no more following blocks.
-      if (following_block_index == tuple_accessors.size()) {
-        break;
-      }
-
-      tuple_accessor = tuple_accessors[following_block_index];
-      argument_accessor = argument_accessors[following_block_index];
-      following_tuple_id = 0;
+    // No more following tuples.
+    if (following_tuple_id == tuple_accessor_->getNumTuples()) {
+      break;
     }
 
     // Get the partition keys and compare. If not the same partition as the
-    // current row, end searching preceding tuples.
+    // current row, stop searching preceding tuples.
     if (!samePartition(current_row_partition_key,
-                       tuple_accessor,
                        following_tuple_id,
                        partition_by_ids)) {
       break;
     }
-
 
     // Actually count the element and do the calculation.
     count_following++;
@@ -334,24 +230,20 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
 
 bool WindowAggregationHandleAvg::samePartition(
     const std::vector<TypedValue> &current_row_partition_key,
-    ValueAccessor *tuple_accessor,
     const tuple_id boundary_tuple_id,
     const std::vector<attribute_id> &partition_by_ids) const {
-  return InvokeOnAnyValueAccessor (tuple_accessor,
-                                   [&] (auto *tuple_accessor) -> bool {
-    for (std::size_t partition_by_index = 0;
-         partition_by_index < partition_by_ids.size();
-         ++partition_by_index) {
-      if (!equal_comparators_[partition_by_index]->compareTypedValues(
-              current_row_partition_key[partition_by_index],
-              tuple_accessor->getTypedValueAtAbsolutePosition(
-                  partition_by_ids[partition_by_index], boundary_tuple_id))) {
-        return false;
-      }
+  for (std::size_t partition_by_index = 0;
+       partition_by_index < partition_by_ids.size();
+       ++partition_by_index) {
+    if (!equal_comparators_[partition_by_index]->compareTypedValues(
+            current_row_partition_key[partition_by_index],
+            tuple_accessor_->getTypedValueAtAbsolutePosition(
+                partition_by_ids[partition_by_index], boundary_tuple_id))) {
+      return false;
     }
+  }
 
-    return true;
-  });
+  return true;
 }
 
 }  // namespace quickstep

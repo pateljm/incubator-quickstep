@@ -184,7 +184,6 @@ class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
     // base_value
     attrs.emplace_back(base_value / kNumTuplesPerPartition);
     return new Tuple(std::move(attrs));
-}
   }
   
   // Handle initialization.
@@ -192,7 +191,8 @@ class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
                         const std::vector<const Type*> &partition_key_types) {
     WindowAggregateFunction *function =
         WindowAggregateFactory::Get(WindowAggregationID::kAvg);
-    handle_avg_.reset(function->createHandle(std::vector<const Type*>(1, &argument_type),
+    handle_avg_.reset(function->createHandle(relation_,
+                                             std::vector<const Type*>(1, &argument_type),
                                              partition_key_types));
   }
 
@@ -218,7 +218,10 @@ class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
   template <typename CppType>
   static void CheckAvgValues(
       std::vector<CppType> expected,
-      const ColumnVector* actual) {
+      const ColumnVector *actual) {
+    EXPECT_TRUE(actual->isNative());
+    NativeColumnVector *native = static_cast<const NativeColumnVector*>(actual);
+
     EXPECT_EQ(expected.size(), actual->size());
     for (std::size_t i = 0; i < expected.size(); ++i) {
       EXPECT_EQ(expected[i], actual->getTypedValue(i).getLiteral<CppType>());
@@ -235,13 +238,17 @@ class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
   void checkAggregationAvgGeneric() {
     const GenericType &type = GenericType::Instance(true);
     initializeHandle(type);
-    EXPECT_TRUE(aggregation_handle_avg_->finalize(*aggregation_handle_avg_state_).isNull());
+    EXPECT_TRUE(aggregation_handle_avg_->finalize(relation_, storage_manager_).empty());
 
+    aggregation_handle_avg_->calculate(relation_.getBlocksSnapshot(),
+                                       std::vector<GenericType
+                                       
+
+    std::vector<OutputType> result_vector;
     typename GenericType::cpptype val;
     typename GenericType::cpptype sum;
     SetDataType(0, &sum);
 
-    iterateHandle(aggregation_handle_avg_state_.get(), type.makeNullValue());
     for (int i = 0; i < kNumSamples; ++i) {
       if (type.getTypeID() == kInt || type.getTypeID() == kLong) {
         SetDataType(i - 10, &val);
@@ -255,30 +262,6 @@ class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
     CheckAvgValue<typename OutputType::cpptype>(static_cast<typename OutputType::cpptype>(sum) / kNumSamples,
                                                 *aggregation_handle_avg_,
                                                 *aggregation_handle_avg_state_);
-
-    // Test mergeStates().
-    std::unique_ptr<AggregationState> merge_state(
-        aggregation_handle_avg_->createInitialState());
-    aggregation_handle_avg_->mergeStates(*merge_state,
-                                         aggregation_handle_avg_state_.get());
-
-    iterateHandle(merge_state.get(), type.makeNullValue());
-    for (int i = 0; i < kNumSamples; ++i) {
-      if (type.getTypeID() == kInt || type.getTypeID() == kLong) {
-        SetDataType(i - 10, &val);
-      } else {
-        SetDataType(static_cast<float>(i - 10)/10, &val);
-      }
-      iterateHandle(merge_state.get(), type.makeValue(&val));
-      sum += val;
-    }
-
-    aggregation_handle_avg_->mergeStates(*merge_state,
-                                         aggregation_handle_avg_state_.get());
-    CheckAvgValue<typename OutputType::cpptype>(
-        static_cast<typename OutputType::cpptype>(sum) / (2 * kNumSamples),
-        *aggregation_handle_avg_,
-        *aggregation_handle_avg_state_);
   }
 
   template <typename GenericType>
@@ -370,7 +353,6 @@ class WindowAggregationHandleAvgTest : public::testing::TestWithParam<bool> {
   std::unique_ptr<AggregationState> aggregation_handle_avg_state_;
   std::unique_ptr<StorageManager> storage_manager_;
   std::unique_ptr<CatalogRelation> relation_;
-  std::vector<block_id> block_ids_;
 };
 
 const int AggregationHandleAvgTest::kNumSamples;

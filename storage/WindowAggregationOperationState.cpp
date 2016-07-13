@@ -39,7 +39,13 @@
 #include "expressions/window_aggregation/WindowAggregationID.hpp"
 #include "storage/InsertDestination.hpp"
 #include "storage/StorageManager.hpp"
+#include "storage/SubBlocksReference.hpp"
+#include "storage/ValueAccessor.hpp"
+#include "storage/ValueAccessorUtil.hpp"
 #include "storage/WindowAggregationOperationState.pb.h"
+#include "types/containers/ColumnVector.hpp"
+#include "types/containers/ColumnVectorsValueAccessor.hpp"
+#include "types/containers/ColumnVectorUtil.hpp"
 
 #include "glog/logging.h"
 
@@ -187,20 +193,102 @@ bool WindowAggregationOperationState::ProtoIsValid(const serialization::WindowAg
 void WindowAggregationOperationState::windowAggregateBlocks(
     InsertDestination *output_destination,
     const std::vector<block_id> &block_ids) {
-  window_aggregation_handle_->calculate(block_ids,
-                                        arguments_,
+  // Get the total number of tuples.
+  int num_tuples = 0;
+  for (block_id block_idx : block_ids) {
+    num_tuples +=
+        storage_manager_->getBlock(block_idx, input_relation_)->getNumTuples();
+  }
+  
+  // Construct column vectors for attributes.
+  std::vector<ColumnVector*> attribute_vecs;
+  for (std::size_t attr_id = 0; attr_id < input_relation_.size(); ++attr_id) {
+    const CatalogAttribute *attr = input_relation_.getAttributeById(attr_id);
+    const Type &type = attr->getType();
+    
+    if (NativeColumnVector::UsableForType(type)) {
+      attribute_vecs.push_back(new NativeColumnVector(type, num_tuples));
+    } else {
+      attribute_vecs.push_back(new IndirectColumnVector(type, num_tuples));
+    }
+  }
+
+  // Construct column vectors for arguments.
+  std::vector<ColumnVector*> argument_vecs;
+  for (std::unique_ptr<const Scalar> &argument : arguments_) {
+    const Type &type = argument->getType();
+
+    if (NativeColumnVector::UsableForType(type)) {
+      argument_vecs.push_back(new NativeColumnVector(type, num_tuples));
+    } else {
+      argument_vecs.push_back(new IndirectColumnVector(type, num_tuples));
+    }
+  }
+
+  // Add tuples and arguments into ColumnVectors.
+  for (block_id block_idx : block_ids) {
+    BlockReference block = storage_manager_->getBlock(block_idx, input_relation_);
+    const TupleStorageSubBlock &tuple_block = block->getTupleStorageSubBlock();
+    SubBlocksReference sub_block_ref(tuple_block,
+                                     block->getIndices(),
+                                     block->getIndicesConsistent());
+    ValueAccessor *tuple_accessor = tuple_block.createValueAccessor();
+    ColumnVectorsValueAccessor *argument_accessor = new ColumnVectorsValueAccessor();
+    for (std::unique_ptr<const Scalar> &argument : arguments_) {
+      argument_accessor->addColumn(argument->getAllValues(tuple_accessor,
+                                                          &sub_block_ref));
+    }
+
+    InvokeOnAnyValueAccessor(tuple_accessor,
+                             [&] (auto *tuple_accessor) -> void {
+      tuple_accessor->beginIteration();
+      argument_accessor->beginIteration();
+
+      while (tuple_accessor->next() && argument_accessor->next()) {
+        for (std::size_t attr_id = 0; attr_id < attribute_vecs.size(); ++attr_id) {
+          ColumnVector *attr_vec = attribute_vecs[attr_id];
+          if (attr_vec->isNative()) {
+            static_cast<NativeColumnVector*>(attr_vec)->appendTypedValue(
+                tuple_accessor->getTypedValue(attr_id));
+          } else {
+            static_cast<IndirectColumnVector*>(attr_vec)->appendTypedValue(
+                tuple_accessor->getTypedValue(attr_id));
+          }
+        }
+
+        for (std::size_t argument_idx = 0;
+             argument_idx < argument_vecs.size();
+             ++argument_idx) {
+          ColumnVector *argument = argument_vecs[argument_idx];
+          if (argument->isNative()) {
+            static_cast<NativeColumnVector*>(argument)->appendTypedValue(
+                argument_accessor->getTypedValue(argument_idx));
+          } else {
+            static_cast<IndirectColumnVector*>(argument)->appendTypedValue(
+                argument_accessor->getTypedValue(argument_idx));
+          }
+        }
+      }
+    });
+  }
+
+  // Construct the value accessor for tuples in all blocks
+  ColumnVectorsValueAccessor *all_blocks_accessor
+      = new ColumnVectorsValueAccessor();
+  for (ColumnVector *attr_vec : attribute_vecs) {
+    all_blocks_accessor->addColumn(attr_vec);
+  }
+
+  // Do actual calculation in handle.
+  window_aggregation_handle_->calculate(all_blocks_accessor,
+                                        std::move(argument_vecs),
                                         partition_by_ids_,
                                         is_row_,
                                         num_preceding_,
-                                        num_following_,
-                                        storage_manager_);
+                                        num_following_);
 
-  std::vector<ValueAccessor*> output_accessors(
-      window_aggregation_handle_->finalize(block_ids, storage_manager_));
-
-  for (ValueAccessor* output_accessor : output_accessors) {
-    output_destination->bulkInsertTuples(output_accessor);
-  }
+  ValueAccessor* output_accessor = window_aggregation_handle_->finalize();
+  output_destination->bulkInsertTuples(output_accessor);
 }
 
 }  // namespace quickstep

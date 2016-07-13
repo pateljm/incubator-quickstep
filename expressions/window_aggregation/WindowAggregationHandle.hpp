@@ -28,11 +28,15 @@
 #include "catalog/CatalogTypedefs.hpp"
 #include "storage/StorageBlockInfo.hpp"
 #include "types/TypedValue.hpp"
+#include "types/containers/ColumnVector.hpp"
+#include "types/containers/ColumnVectorsValueAccessor.hpp"
+#include "types/operations/comparisons/Comparison.hpp"
+#include "types/operations/comparisons/ComparisonFactory.hpp"
+#include "types/operations/comparisons/ComparisonID.hpp"
 #include "utility/Macros.hpp"
 
 namespace quickstep {
 
-class ColumnVector;
 class InsertDestinationInterface;
 class Scalar;
 class StorageManager;
@@ -98,17 +102,14 @@ class WindowAggregationHandle {
    *                          NULL if all arguments are attributes.
    * @param output_destination The destination for output.
    **/
-  virtual void calculate(const std::vector<block_id> &block_ids,
-                         const std::vector<std::unique_ptr<const Scalar>> &arguments,
+  virtual void calculate(ColumnVectorsValueAccessor* block_accessors,
+                         std::vector<ColumnVector*> &&arguments,
                          const std::vector<attribute_id> &partition_by_ids,
                          const bool is_row,
                          const std::int64_t num_preceding,
-                         const std::int64_t num_following,
-                         StorageManager *storage_manager) = 0;
+                         const std::int64_t num_following) = 0;
 
-  virtual std::vector<ValueAccessor*> finalize(
-      const std::vector<block_id> &block_ids,
-      StorageManager *storage_manager) = 0;
+  virtual ValueAccessor* finalize() = 0;
 
  protected:
   /**
@@ -121,11 +122,21 @@ class WindowAggregationHandle {
    * @param num_following The number of rows/range that follows the current row.
    * @param storage_manager A pointer to the storage manager.
    **/
-  WindowAggregationHandle(const CatalogRelationSchema &relation)
-      : relation_(relation) {}
+  WindowAggregationHandle(const CatalogRelationSchema &relation,
+                          std::vector<const Type*> &&partition_key_types)
+      : relation_(relation) {
+    // Comparison operators for checking if two tuples belong to the same partition.
+    for (const Type *partition_key_type : partition_key_types) {
+      equal_comparators_.emplace_back(
+          ComparisonFactory::GetComparison(ComparisonID::kEqual)
+              .makeUncheckedComparatorForTypes(*partition_key_type, *partition_key_type));
+    }
+  }
 
-  std::vector<ColumnVector*> window_aggregates_;
+  std::unique_ptr<ColumnVectorsValueAccessor> tuple_accessor_;
+  std::unique_ptr<NativeColumnVector> window_aggregates_;
   const CatalogRelationSchema &relation_;
+  std::vector<std::unique_ptr<UncheckedComparator>> equal_comparators_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(WindowAggregationHandle);

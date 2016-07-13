@@ -80,8 +80,8 @@ WindowAggregationHandle* WindowAggregateFunctionAvg::createHandle(
       << " that AVG can not be applied to.";
 
   return new WindowAggregationHandleAvg(relation,
-                                        *argument_types.front(),
-                                        std::move(partition_key_types));
+                                        std::move(partition_key_types),
+                                        *argument_types.front());
 }
 
 }  // namespace quickstep

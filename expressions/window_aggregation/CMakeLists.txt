@@ -75,6 +75,11 @@ target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationH
                       quickstep_catalog_CatalogTypedefs
                       quickstep_storage_StorageBlockInfo
                       quickstep_types_TypedValue
+                      quickstep_types_containers_ColumnVector
+                      quickstep_types_containers_ColumnVectorsValueAccessor
+                      quickstep_types_operations_comparisons_Comparison
+                      quickstep_types_operations_comparisons_ComparisonFactory
+                      quickstep_types_operations_comparisons_ComparisonID
                       quickstep_utility_Macros)
 target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationHandleAvg
                       glog
@@ -83,10 +88,6 @@ target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationH
                       quickstep_expressions_scalar_ScalarAttribute
                       quickstep_expressions_windowaggregation_WindowAggregationHandle
                       quickstep_storage_InsertDestinationInterface
-                      quickstep_storage_StorageBlock
-                      quickstep_storage_StorageManager
-                      quickstep_storage_SubBlocksReference
-                      quickstep_storage_TupleStorageSubBlock
                       quickstep_storage_ValueAccessor
                       quickstep_storage_ValueAccessorUtil
                       quickstep_types_Type
@@ -98,6 +99,4 @@ target_link_libraries(quickstep_expressions_windowaggregation_WindowAggregationH
                       quickstep_types_operations_binaryoperations_BinaryOperationFactory
                       quickstep_types_operations_binaryoperations_BinaryOperationID
                       quickstep_types_operations_comparisons_Comparison
-                      quickstep_types_operations_comparisons_ComparisonFactory
-                      quickstep_types_operations_comparisons_ComparisonID
                       quickstep_utility_Macros)
