@@ -280,15 +280,16 @@ void WindowAggregationOperationState::windowAggregateBlocks(
   }
 
   // Do actual calculation in handle.
-  window_aggregation_handle_->calculate(all_blocks_accessor,
-                                        std::move(argument_vecs),
-                                        partition_by_ids_,
-                                        is_row_,
-                                        num_preceding_,
-                                        num_following_);
+  ColumnVector *window_aggregates =
+      window_aggregation_handle_->calculate(all_blocks_accessor,
+                                            std::move(argument_vecs),
+                                            partition_by_ids_,
+                                            is_row_,
+                                            num_preceding_,
+                                            num_following_);
 
-  ValueAccessor* output_accessor = window_aggregation_handle_->finalize();
-  output_destination->bulkInsertTuples(output_accessor);
+  all_blocks_accessor->addColumn(window_aggregates);
+  output_destination->bulkInsertTuples(all_blocks_accessor);
 }
 
 }  // namespace quickstep

@@ -88,22 +88,21 @@ WindowAggregationHandleAvg::WindowAggregationHandleAvg(
           .makeUncheckedBinaryOperatorForTypes(*sum_type_, TypeFactory::GetType(kDouble)));
 }
 
-void WindowAggregationHandleAvg::calculate(ColumnVectorsValueAccessor *tuple_accessor,
-                                           std::vector<ColumnVector*> &&arguments,
-                                           const std::vector<attribute_id> &partition_by_ids,
-                                           const bool is_row,
-                                           const std::int64_t num_preceding,
-                                           const std::int64_t num_following) {
+ColumnVector* WindowAggregationHandleAvg::calculate(
+    ColumnVectorsValueAccessor *tuple_accessor,
+    std::vector<ColumnVector*> &&arguments,
+    const std::vector<attribute_id> &partition_by_ids,
+    const bool is_row,
+    const std::int64_t num_preceding,
+    const std::int64_t num_following) {
   DCHECK(arguments.size() == 1);
   DCHECK(arguments[0]->isNative());
   DCHECK(static_cast<std::size_t>(tuple_accessor->getNumTuples()) ==
          static_cast<const NativeColumnVector*>(arguments[0])->size());
-
-  tuple_accessor_.reset(tuple_accessor);
   
   // Initialize the output column and argument accessor.
-  window_aggregates_.reset(
-      new NativeColumnVector(*result_type_, tuple_accessor->getNumTuples()));
+  NativeColumnVector *window_aggregates =
+      new NativeColumnVector(*result_type_, tuple_accessor->getNumTuples());
   ColumnVectorsValueAccessor* argument_accessor = new ColumnVectorsValueAccessor();
   argument_accessor->addColumn(arguments[0]);
   
@@ -111,22 +110,21 @@ void WindowAggregationHandleAvg::calculate(ColumnVectorsValueAccessor *tuple_acc
   tuple_accessor->beginIteration();
   argument_accessor->beginIteration();
       
-  while (tuple_accessor_->next() && argument_accessor->next()) {
-    const TypedValue window_aggregate = this->calculateOneWindow(argument_accessor,
+  while (tuple_accessor->next() && argument_accessor->next()) {
+    const TypedValue window_aggregate = this->calculateOneWindow(tuple_accessor,
+                                                                 argument_accessor,
                                                                  partition_by_ids,
                                                                  is_row,
                                                                  num_preceding,
                                                                  num_following);
-    window_aggregates_->appendTypedValue(window_aggregate);
+    window_aggregates->appendTypedValue(window_aggregate);
   }
-}
 
-ValueAccessor* WindowAggregationHandleAvg::finalize() {
-  tuple_accessor_->addColumn(window_aggregates_.release());
-  return tuple_accessor_.get();
+  return window_aggregates;
 }
 
 TypedValue WindowAggregationHandleAvg::calculateOneWindow(
+    ColumnVectorsValueAccessor *tuple_accessor,
     ColumnVectorsValueAccessor *argument_accessor,
     const std::vector<attribute_id> &partition_by_ids,
     const bool is_row,
@@ -149,11 +147,11 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
   std::vector<TypedValue> current_row_partition_key;
   for (attribute_id partition_by_id : partition_by_ids) {
     current_row_partition_key.push_back(
-        tuple_accessor_->getTypedValue(partition_by_id));
+        tuple_accessor->getTypedValue(partition_by_id));
   }
 
   // Get current position.
-  tuple_id current_tuple_id = tuple_accessor_->getCurrentPositionVirtual();
+  tuple_id current_tuple_id = tuple_accessor->getCurrentPositionVirtual();
   
   // Find preceding tuples.
   int count_preceding = 0;
@@ -168,7 +166,8 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
 
     // Get the partition keys and compare. If not the same partition as the
     // current row, stop searching preceding tuples.
-    if (!samePartition(current_row_partition_key,
+    if (!samePartition(tuple_accessor,
+                       current_row_partition_key,
                        preceding_tuple_id,
                        partition_by_ids)) {
       break;
@@ -196,13 +195,14 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
     following_tuple_id++;
 
     // No more following tuples.
-    if (following_tuple_id == tuple_accessor_->getNumTuples()) {
+    if (following_tuple_id == tuple_accessor->getNumTuples()) {
       break;
     }
 
     // Get the partition keys and compare. If not the same partition as the
     // current row, stop searching preceding tuples.
-    if (!samePartition(current_row_partition_key,
+    if (!samePartition(tuple_accessor,
+                       current_row_partition_key,
                        following_tuple_id,
                        partition_by_ids)) {
       break;
@@ -229,6 +229,7 @@ TypedValue WindowAggregationHandleAvg::calculateOneWindow(
 }
 
 bool WindowAggregationHandleAvg::samePartition(
+    const ColumnVectorsValueAccessor *tuple_accessor,
     const std::vector<TypedValue> &current_row_partition_key,
     const tuple_id boundary_tuple_id,
     const std::vector<attribute_id> &partition_by_ids) const {
@@ -237,7 +238,7 @@ bool WindowAggregationHandleAvg::samePartition(
        ++partition_by_index) {
     if (!equal_comparators_[partition_by_index]->compareTypedValues(
             current_row_partition_key[partition_by_index],
-            tuple_accessor_->getTypedValueAtAbsolutePosition(
+            tuple_accessor->getTypedValueAtAbsolutePosition(
                 partition_by_ids[partition_by_index], boundary_tuple_id))) {
       return false;
     }

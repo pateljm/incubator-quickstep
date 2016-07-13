@@ -102,14 +102,12 @@ class WindowAggregationHandle {
    *                          NULL if all arguments are attributes.
    * @param output_destination The destination for output.
    **/
-  virtual void calculate(ColumnVectorsValueAccessor* block_accessors,
-                         std::vector<ColumnVector*> &&arguments,
-                         const std::vector<attribute_id> &partition_by_ids,
-                         const bool is_row,
-                         const std::int64_t num_preceding,
-                         const std::int64_t num_following) = 0;
-
-  virtual ValueAccessor* finalize() = 0;
+  virtual ColumnVector* calculate(ColumnVectorsValueAccessor* block_accessors,
+                                  std::vector<ColumnVector*> &&arguments,
+                                  const std::vector<attribute_id> &partition_by_ids,
+                                  const bool is_row,
+                                  const std::int64_t num_preceding,
+                                  const std::int64_t num_following) = 0;
 
  protected:
   /**
@@ -133,8 +131,6 @@ class WindowAggregationHandle {
     }
   }
 
-  std::unique_ptr<ColumnVectorsValueAccessor> tuple_accessor_;
-  std::unique_ptr<NativeColumnVector> window_aggregates_;
   const CatalogRelationSchema &relation_;
   std::vector<std::unique_ptr<UncheckedComparator>> equal_comparators_;
 
